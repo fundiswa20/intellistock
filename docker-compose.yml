@@ -1,0 +1,33 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: intellistock-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-devpassword}
+      MYSQL_DATABASE: ${DB_NAME:-intellistock}
+    ports:
+      - "3306:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_ROOT_PASSWORD:-devpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  model-service:
+    build: ./model-service
+    container_name: intellistock-model
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./model-service/models:/app/models
+    environment:
+      MODEL_DIR: /app/models
+
+  # api:      added Thu 24 Sep
+  # client:   added Sat 26 Sep
+
+volumes:
+  db-data:

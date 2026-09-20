@@ -1,0 +1,26 @@
+# data and model artefacts
+model-service/data/*.csv
+model-service/models/*.joblib
+!model-service/data/.gitkeep
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# .net
+bin/
+obj/
+
+# node
+node_modules/
+dist/
+
+# env
+.env
+*.local
+
+# os
+.DS_Store
+Thumbs.db
