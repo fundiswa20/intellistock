@@ -1,0 +1,9 @@
+{
+  "mape": 10.509,
+  "baseline_mape": 22.175,
+  "improvement_pct": 52.61,
+  "mae": 8.038,
+  "test_rows": 14900,
+  "test_start": "2023-09-03",
+  "test_end": "2024-01-29"
+}

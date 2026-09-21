@@ -1,0 +1,39 @@
+IntelliStock - dataset inspection
+============================================================
+File        : sales_data.csv
+Rows        : 76,000
+Columns     : 16
+
+Columns found:
+  Date                         object     nulls=0
+  Store ID                     object     nulls=0
+  Product ID                   object     nulls=0
+  Category                     object     nulls=0
+  Region                       object     nulls=0
+  Inventory Level              int64      nulls=0
+  Units Sold                   int64      nulls=0
+  Units Ordered                int64      nulls=0
+  Price                        float64    nulls=0
+  Discount                     int64      nulls=0
+  Weather Condition            object     nulls=0
+  Promotion                    int64      nulls=0
+  Competitor Pricing           float64    nulls=0
+  Seasonality                  object     nulls=0
+  Epidemic                     int64      nulls=0
+  Demand                       int64      nulls=0
+
+Required field mapping:
+  date         -> Date
+  product      -> Product ID
+  units_sold   -> Units Sold
+
+Optional field mapping (improve accuracy if present):
+  category     -> Category
+  inventory    -> Inventory Level
+  price        -> Price
+  store        -> Store ID
+
+Date range  : 2022-01-01 to 2024-01-30 (759 days)
+Products    : 20
+
+VERDICT: USABLE - required fields present with sufficient history.

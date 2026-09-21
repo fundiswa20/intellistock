@@ -1,0 +1,41 @@
+IntelliStock - model training and evaluation
+================================================================
+Run at       : 2026-09-21 19:56
+Dataset      : sales_data.csv
+Model version: v1.0-base
+
+Rows after standardisation : 76,000
+Products                   : 20
+Date range                 : 2022-01-01 to 2024-01-30
+
+Rows after feature engineering : 74,900
+Features                       : 12
+Label                          : mean daily demand over next 7 days
+
+Split: CHRONOLOGICAL (not random - a random split would leak future
+       information into training and inflate the measured accuracy)
+  cutoff date : 2023-09-02
+  train rows  : 60,000  (2022-01-11 to 2023-09-02)
+  test rows   : 14,900  (2023-09-03 to 2024-01-29)
+
+RESULTS
+----------------------------------------------------------------
+  Model    MAPE :  10.51 %      MAE :   8.04 units
+  Baseline MAPE :  22.18 %      MAE :  15.18 units
+  Improvement over baseline : 52.6 %
+
+Requirement checks
+  ETR-01 target MAPE <= 20%           : PASS (10.51%)
+  ETR-01 beat baseline by >= 10%      : PASS (52.6%)
+
+Feature importance (permutation, top 8)
+  roll_mean_7            1.4132
+  category_code          0.0171
+  days_since_restock     0.0101
+  trend_7_30             0.0058
+  roll_mean_30           0.0049
+  day_of_month           0.0030
+  roll_std_7             0.0025
+  roll_std_30            0.0024
+
+Saved model artefact : models/v1.0-base.joblib

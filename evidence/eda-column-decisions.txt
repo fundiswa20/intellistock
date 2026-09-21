@@ -1,0 +1,98 @@
+IntelliStock - exploratory data analysis and column decisions
+======================================================================
+Source file : sales_data.csv
+Raw rows    : 76,000
+Raw columns : 16
+
+The raw file is used exactly as downloaded. Columns are selected and
+excluded in code (features.py), never by editing the CSV, so the
+pipeline reproduces the same result from the original download.
+
+COLUMNS USED
+----------------------------------------------------------------------
+  Date                     -> date
+  Product ID               -> product
+  Units Sold               -> units_sold
+  Category                 -> category
+  Store ID                 -> store
+  Units Ordered            -> units_ordered
+
+COLUMNS EXCLUDED, WITH REASONS
+----------------------------------------------------------------------
+  Region
+      Constant within a store, so it adds no signal beyond the store identifier.
+  Inventory Level
+      Supplied live from the StockItem table at inference, not learned from.
+  Price
+      Excluded from v1.0 - price effects need a dynamic-pricing model (out of scope).
+  Discount
+      Excluded from v1.0 - promotions are not modelled in the current scope.
+  Weather Condition
+      Not available at inference time without a weather feed (out of scope).
+  Promotion
+      Excluded from v1.0 - promotions are not modelled in the current scope.
+  Competitor Pricing
+      Not collected by IntelliStock; suppliers self-report their own prices.
+  Seasonality
+      Redundant - month and day-of-week features already capture this.
+  Epidemic
+      Not available at inference time; the live system has no such flag.
+  Demand
+      Target leakage - a pre-computed estimate of the value being predicted.
+
+ENGINEERED FEATURES
+----------------------------------------------------------------------
+  12 features derived from the columns above:
+    - roll_mean_7
+    - roll_mean_14
+    - roll_mean_30
+    - roll_std_7
+    - roll_std_30
+    - trend_7_30
+    - day_of_week
+    - day_of_month
+    - month
+    - is_month_end_window
+    - days_since_restock
+    - category_code
+
+DATA PROFILE AFTER STANDARDISATION
+----------------------------------------------------------------------
+  Rows                : 76,000
+  Series (store+item) : 100
+  Stores              : 5
+  Products            : 20
+  Categories          : 5
+  Date range          : 2022-01-01 to 2024-01-30
+  Days                : 759
+
+  Units sold per day:
+    mean        88.83
+    std         43.99
+    min          0.00
+    25%         58.00
+    50%         84.00
+    75%        114.00
+    max        426.00
+    zero-sales days : 0.5%
+
+  Mean daily units sold by category:
+    Groceries                102.87
+    Clothing                  94.64
+    Electronics               83.04
+    Toys                      78.45
+    Furniture                 64.38
+
+  Mean daily units sold by day of week:
+    Monday                    87.87
+    Tuesday                   88.42
+    Wednesday                 89.55
+    Thursday                  88.88
+    Friday                    89.18
+    Saturday                  88.96
+    Sunday                    88.95
+
+  These weekday and category differences are the patterns the rolling
+  and seasonality features are designed to capture.
+
+Saved chart: evidence/eda-demand-profile.png
