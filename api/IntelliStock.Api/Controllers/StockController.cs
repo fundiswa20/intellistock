@@ -360,6 +360,9 @@ public class StockController(InventoryRepository db, IHttpClientFactory http, IL
         p.ReorderPredictionId, p.StockItemId, stockItemName = item.Name,
         quantityOnHand = item.QuantityOnHand, reorderLevel = item.ReorderLevel,
         p.PredictedDailyDemand, p.Confidence, p.DaysUntilStockOut, p.RecommendedQuantity,
+        // ETR-03: which path produced this recommendation, in the requirement's own words
+        recommendationSource = ReorderCalculator.Source(p.FallbackReason),
+        basis = ReorderCalculator.Basis(p.FallbackReason, p.ModelVersion, p.Confidence, historyDays),
         p.ModelVersion, p.UsedFallback, p.FallbackReason, historyDays, p.CreatedAt,
     };
 }

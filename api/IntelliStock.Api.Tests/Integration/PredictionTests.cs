@@ -53,6 +53,8 @@ public class PredictionTests(ApiFactory api) : IDisposable
 
         Assert.False(p.GetProperty("usedFallback").GetBoolean());
         Assert.Equal(JsonValueKind.Null, p.GetProperty("fallbackReason").ValueKind);
+        Assert.Equal("model", p.GetProperty("recommendationSource").GetString());
+        Assert.Equal("Model forecast (v1.1-relative), confidence 0.82", p.GetProperty("basis").GetString());
         Assert.Equal(2.5m, p.GetProperty("predictedDailyDemand").GetDecimal());
         Assert.Equal(0.82m, p.GetProperty("confidence").GetDecimal());
         Assert.Equal("v1.1-relative", p.GetProperty("modelVersion").GetString());
@@ -70,6 +72,9 @@ public class PredictionTests(ApiFactory api) : IDisposable
 
         Assert.True(p.GetProperty("usedFallback").GetBoolean());
         Assert.Equal("lowConfidence", p.GetProperty("fallbackReason").GetString());
+        Assert.Equal("thresholdBasedAdvice", p.GetProperty("recommendationSource").GetString());
+        Assert.StartsWith("Threshold-based advice: 30-day average sales, because the model's confidence 0.41",
+            p.GetProperty("basis").GetString());
         Assert.NotEqual(9.9m, p.GetProperty("predictedDailyDemand").GetDecimal());   // the model's number is not used
         Assert.Equal(0.41m, p.GetProperty("confidence").GetDecimal());                // but its confidence is kept
         var sent = Assert.Single(api.Model.Requests).GetProperty("dailySales").EnumerateArray().Select(v => v.GetDouble());
@@ -85,6 +90,7 @@ public class PredictionTests(ApiFactory api) : IDisposable
 
         Assert.True(p.GetProperty("usedFallback").GetBoolean());
         Assert.Equal("insufficientHistory", p.GetProperty("fallbackReason").GetString());
+        Assert.Equal("thresholdBasedAdvice", p.GetProperty("recommendationSource").GetString());
         Assert.True(p.GetProperty("historyDays").GetInt32() < 30);
         Assert.Equal(JsonValueKind.Null, p.GetProperty("modelVersion").ValueKind);
     }

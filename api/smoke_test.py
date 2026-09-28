@@ -97,7 +97,7 @@ def main():
 
     # FR-08 against the real model service
     for item, label in ((1, "fast mover, bread"), (11, "fast mover, chips"),
-                        (3, "slow mover, maize meal"), (19, "erratic, candles after load shedding"),
+                        (3, "slow mover, maize meal"), (19, "candles, load-shedding spike in the last 8 weeks"),
                         (22, "new item, 13 days of history")):
         s, b = call(base, "POST", f"/api/stock/{item}/prediction", token=token)
         check(f"FR-08 POST /api/stock/{item}/prediction - {label}", s, 200, b)

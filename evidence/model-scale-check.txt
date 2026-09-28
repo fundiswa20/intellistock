@@ -1,6 +1,6 @@
 IntelliStock - forecast scale check
 ================================================================
-Run at : 2026-09-28 18:18
+Run at : 2026-09-28 19:37
 Target : http://localhost:8000/predict
 
 1. Flat history: the same units every day for 60 days, category Groceries,
@@ -19,8 +19,8 @@ Target : http://localhost:8000/predict
 
    mean/day |                v1.0-base |            v1.1-relative
   ---------------------------------------------------------------
-        3.0 |        44.13 conf 0.69   |         2.97 conf 0.69  
-       10.0 |        43.25 conf 0.76   |        10.64 conf 0.76  
-       29.7 |        45.82 conf 0.88   |        28.20 conf 0.88  
+        3.0 |        44.13 conf 0.85   |         2.97 conf 0.85  
+       10.0 |        43.25 conf 0.93   |        10.64 conf 0.93  
+       29.7 |        45.82 conf 0.94   |        28.20 conf 0.94  
 
   mean/day = mean of the last 30 days sent. conf = confidence heuristic (D11).

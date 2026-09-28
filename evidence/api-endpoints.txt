@@ -1,6 +1,6 @@
 IntelliStock - API end-to-end check (real MySQL, real model service)
 ======================================================================
-Run at : 2026-09-28 19:27
+Run at : 2026-09-28 19:39
 Target : http://localhost:5000
 
 [PASS] GET /health - API up, database connected
@@ -14,7 +14,7 @@ Target : http://localhost:5000
        HTTP 200 (expected 200)
        {
          "token": "eyJhbGciOiJIUzI1NiIsInR5... (truncated)",
-         "expiresAt": "2026-09-29T01:27:43.6832776Z",
+         "expiresAt": "2026-09-29T01:39:23.3907746Z",
          "user": {
            "id": 1,
            "fullName": "Nomvula Dlamini",
@@ -87,7 +87,7 @@ Target : http://localhost:5000
          "type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
          "title": "Not Found",
          "status": 404,
-         "traceId": "00-99d237884927cac54f264cbed18e1c7e-88f1ae8e76b14a71-00"
+         "traceId": "00-2de5a5f006d847b578eced650ce21cd7-d53192b3946f50ed-00"
        }
 
 [PASS] FR-04 GET /api/stock/3/movements - transaction log, newest first
@@ -185,83 +185,91 @@ Target : http://localhost:5000
 [PASS] FR-08 POST /api/stock/1/prediction - fast mover, bread
        HTTP 200 (expected 200)
        {
-         "reorderPredictionId": 3,
+         "reorderPredictionId": 57,
          "stockItemId": 1,
          "stockItemName": "Albany Brown Bread 700g",
          "quantityOnHand": 0,
          "reorderLevel": 6,
          "predictedDailyDemand": 22.1,
-         "confidence": 0.704,
+         "confidence": 0.906,
          "daysUntilStockOut": 0,
          "recommendedQuantity": 161,
+         "recommendationSource": "model",
+         "basis": "Model forecast (v1.1-relative), confidence 0.91",
          "modelVersion": "v1.1-relative",
          "usedFallback": false,
          "fallbackReason": null,
          "historyDays": 60,
-         "createdAt": "2026-09-28T19:27:44.836681"
+         "createdAt": "2026-09-28T19:39:23.6537657"
        }
 
 [PASS] FR-08 POST /api/stock/11/prediction - fast mover, chips
        HTTP 200 (expected 200)
        {
-         "reorderPredictionId": 4,
+         "reorderPredictionId": 58,
          "stockItemId": 11,
          "stockItemName": "Simba Chips 36g",
          "quantityOnHand": 0,
          "reorderLevel": 20,
          "predictedDailyDemand": 19.486,
-         "confidence": 0.779,
+         "confidence": 0.926,
          "daysUntilStockOut": 0,
          "recommendedQuantity": 157,
+         "recommendationSource": "model",
+         "basis": "Model forecast (v1.1-relative), confidence 0.93",
          "modelVersion": "v1.1-relative",
          "usedFallback": false,
          "fallbackReason": null,
          "historyDays": 60,
-         "createdAt": "2026-09-28T19:27:45.2094553"
+         "createdAt": "2026-09-28T19:39:23.805537"
        }
 
 [PASS] FR-08 POST /api/stock/3/prediction - slow mover, maize meal
        HTTP 200 (expected 200)
        {
-         "reorderPredictionId": 5,
+         "reorderPredictionId": 59,
          "stockItemId": 3,
          "stockItemName": "Iwisa Super Maize Meal 5kg",
          "quantityOnHand": 5,
          "reorderLevel": 4,
-         "predictedDailyDemand": 2.867,
-         "confidence": 0.578,
-         "daysUntilStockOut": 1.7,
-         "recommendedQuantity": 20,
+         "predictedDailyDemand": 3.411,
+         "confidence": 0.771,
+         "daysUntilStockOut": 1.5,
+         "recommendedQuantity": 23,
+         "recommendationSource": "model",
+         "basis": "Model forecast (v1.1-relative), confidence 0.77",
          "modelVersion": "v1.1-relative",
-         "usedFallback": true,
-         "fallbackReason": "lowConfidence",
+         "usedFallback": false,
+         "fallbackReason": null,
          "historyDays": 60,
-         "createdAt": "2026-09-28T19:27:45.3767723"
+         "createdAt": "2026-09-28T19:39:23.9326072"
        }
 
-[PASS] FR-08 POST /api/stock/19/prediction - erratic, candles after load shedding
+[PASS] FR-08 POST /api/stock/19/prediction - candles, load-shedding spike in the last 8 weeks
        HTTP 200 (expected 200)
        {
-         "reorderPredictionId": 6,
+         "reorderPredictionId": 60,
          "stockItemId": 19,
          "stockItemName": "Household Candles 6-pack",
          "quantityOnHand": 11,
          "reorderLevel": 4,
-         "predictedDailyDemand": 1.667,
-         "confidence": 0.442,
-         "daysUntilStockOut": 6.6,
-         "recommendedQuantity": 5,
+         "predictedDailyDemand": 1.047,
+         "confidence": 0.618,
+         "daysUntilStockOut": 10.5,
+         "recommendedQuantity": 1,
+         "recommendationSource": "model",
+         "basis": "Model forecast (v1.1-relative), confidence 0.62",
          "modelVersion": "v1.1-relative",
-         "usedFallback": true,
-         "fallbackReason": "lowConfidence",
+         "usedFallback": false,
+         "fallbackReason": null,
          "historyDays": 60,
-         "createdAt": "2026-09-28T19:27:45.5111026"
+         "createdAt": "2026-09-28T19:39:24.0232912"
        }
 
 [PASS] FR-08 POST /api/stock/22/prediction - new item, 13 days of history
        HTTP 200 (expected 200)
        {
-         "reorderPredictionId": 7,
+         "reorderPredictionId": 61,
          "stockItemId": 22,
          "stockItemName": "Fatti's & Moni's Spaghetti 500g",
          "quantityOnHand": 6,
@@ -270,11 +278,13 @@ Target : http://localhost:5000
          "confidence": null,
          "daysUntilStockOut": 3.2,
          "recommendedQuantity": 10,
+         "recommendationSource": "thresholdBasedAdvice",
+         "basis": "Threshold-based advice: average sales over 13 days, because the model needs at least 30 days of history",
          "modelVersion": null,
          "usedFallback": true,
          "fallbackReason": "insufficientHistory",
          "historyDays": 13,
-         "createdAt": "2026-09-28T19:27:45.573427"
+         "createdAt": "2026-09-28T19:39:24.0888096"
        }
 
 15 of 15 checks passed

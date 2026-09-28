@@ -1,6 +1,6 @@
 IntelliStock - model service smoke test
 ================================================================
-Run at : 2026-09-28 18:18
+Run at : 2026-09-28 19:37
 Target : http://localhost:8000
 
 [PASS] GET /health
@@ -9,15 +9,15 @@ Target : http://localhost:8000
 
 [PASS] POST /predict - steady demand (mean 41.4/day), default model
        HTTP 200 (expected 200)
-       {"predictedDailyDemand": 40.317, "confidence": 0.952, "lowConfidence": false, "modelVersion": "v1.1-relative", "sufficientHistory": true}
+       {"predictedDailyDemand": 40.317, "confidence": 0.992, "lowConfidence": false, "modelVersion": "v1.1-relative", "sufficientHistory": true}
 
-[PASS] POST /predict - erratic demand, expect lowConfidence=true (ETR-03)
+[PASS] POST /predict - demand volatile week to week, expect lowConfidence=true (ETR-03)
        HTTP 200 (expected 200)
-       {"predictedDailyDemand": 33.922, "confidence": 0.411, "lowConfidence": true, "modelVersion": "v1.1-relative", "sufficientHistory": true}
+       {"predictedDailyDemand": 12.92, "confidence": 0.466, "lowConfidence": true, "modelVersion": "v1.1-relative", "sufficientHistory": true}
 
 [PASS] POST /predict - modelId v1.0-base still served
        HTTP 200 (expected 200)
-       {"predictedDailyDemand": 53.509, "confidence": 0.952, "lowConfidence": false, "modelVersion": "v1.0-base", "sufficientHistory": true}
+       {"predictedDailyDemand": 53.509, "confidence": 0.992, "lowConfidence": false, "modelVersion": "v1.0-base", "sufficientHistory": true}
 
 [PASS] POST /predict - 29 days of history, expect 422 insufficientHistory (ETR-03)
        HTTP 422 (expected 422)

@@ -13,53 +13,46 @@ _Last updated: Mon 28 Sep 2026._
 | Component | UML name | State |
 |---|---|---|
 | Model training + evaluation | — | **Done.** Default model `v1.1-relative`: MAPE 10.53% vs 22.18% baseline, works at any sales volume (D16). `v1.0-base` (10.51%) kept. |
-| Model service | ReorderPredictionService | **Done.** `POST /predict`, `GET /health`, `GET /models/{id}`, running in Docker Compose. p95 latency 69.9 ms. |
+| Model service | ReorderPredictionService | **Done.** `POST /predict`, `GET /health`, `GET /models/{id}`, running in Docker Compose. p95 latency 72.7 ms. Confidence measured on weekly totals (D31). |
 | MySQL schema + seed | all 8 UML classes | **Done.** 8 tables, FR-04 immutability enforced by triggers, 120 days of spaza-shop history (5,570 transactions). Verified: `evidence/db-verification.txt`. |
-| API | StockController, InventoryRepository (+ AuthController, see O5) | **Done.** ASP.NET Core 8, EF Core 8 + Pomelo, JWT. 37 unit + 32 integration tests pass. Runs in Docker Compose on port 5000. |
+| API | AuthController, StockController, InventoryRepository | **Done.** ASP.NET Core 8, EF Core 8 + Pomelo, JWT. 41 unit + 32 integration tests pass; end-to-end 15/15. Runs in Docker Compose on port 5000. |
 | Client | InventoryDashboard | Not started. Minimal two-screen client planned for Tue 29 (screenshots and user guide); the full client is for Assignment 4. |
 
-**Requirements**
+**Requirements — traceability status for Assignment 3**
 
-| ID | Requirement | Status |
-|---|---|---|
-| FR-01 | Registration | Partial — users seeded, no registration UI |
-| FR-02 | Login | API done and tested; UI to build |
-| FR-03 | Stock item CRUD | API done and tested; UI to build |
-| FR-04 | Stock movement, immutable transaction log | API done and tested, immutability enforced by the database; UI to build |
-| FR-05 | Low-stock alerts | API done and tested; UI to build |
-| FR-06, FR-07 | Supplier functionality | Partial — supplier data seeded, no supplier interface |
-| FR-08 | Reorder prediction | Model service and API done and tested end to end; UI to build |
-| FR-09 | Consolidated reorder plan | Not met — deferred |
-| ETR-01 | MAPE ≤ 20% and ≥ 10% better than baseline | Met — v1.1-relative 10.53%, 52.5% better than baseline, same test period as v1.0 |
-| ETR-03 | 422 on insufficient history; low-confidence flag | Met in the model service; the fallback itself is the API's job |
+Graded from the system's point of view: a requirement is Pass when the system does it and
+tests prove it, whether or not a screen exists yet. "API only" marks behaviour that is built
+and tested in the API but has no client screen yet (the minimal client is Tue 29).
+
+| ID | Requirement | Status | Reason | Evidence |
+|---|---|---|---|---|
+| FR-01 | Registration | Partial | Users are seeded with hashed passwords; no registration endpoint or screen. | `db/init/02-seed.sql`, `PasswordHashTests` |
+| FR-02 | Login | Pass | JWT login against seeded users; wrong password and unknown email get the same 401; missing or forged token rejected; suppliers refused stock endpoints. | `tests-integration.txt` (AuthTests, 6), `api-endpoints.txt` |
+| FR-03 | Stock item CRUD | Pass — API only | Create, read, update, soft delete; each owner sees only their own stock; another owner's item is 404. | `tests-integration.txt` (StockItemTests, 7) |
+| FR-04 | Stock movement, immutable transaction log | Pass — API only | Sale/Restock/Adjustment with running balance and row lock; overselling refused; UPDATE/DELETE rejected by database triggers. | `tests-integration.txt`, `tests-unit.txt`, `db-verification.txt` |
+| FR-05 | Low-stock alerts | Pass — API only | Raised at or below the reorder level, resolved on restock, one open alert per item enforced by the database; 8 open in the seed. | `tests-integration.txt`, `db-verification.txt` |
+| FR-06 | Supplier functionality | Partial | Supplier accounts and price lists seeded; no supplier interface. | `db-verification.txt` §8 |
+| FR-07 | Supplier functionality | Partial | Supplier data seeded; no supplier interface. | `db-verification.txt` §8 |
+| FR-08 | Reorder prediction | Pass — API only | Model called with history from the transaction log; days to stock-out and reorder quantity derived in the API; threshold-based advice when the model cannot be trusted. | `api-endpoints.txt`, `tests-integration.txt` (PredictionTests, 8), `model-*.txt` |
+| FR-09 | Consolidated reorder plan | Not met | Deferred. | — |
+| FR-10 | Order placement and status tracking | Not met | Deferred; ordering is not part of the prototype scope. | — |
+| ETR-01 | MAPE ≤ 20% and ≥ 10% better than baseline | Pass | v1.1-relative 10.53% vs 22.18% baseline (52.5% better), chronological test period. | `model-evaluation-v1.1-relative.txt` |
+| ETR-03 | Insufficient history and low confidence handled | Pass | Model service: 422 under 30 days and `lowConfidence` under 0.6. API: threshold-based advice with the reason recorded and shown (D25). | `model-service-smoke.txt`, `tests-integration.txt` |
 
 **Open issues**
 
-- **O4 — the confidence heuristic flags most slow-moving items.** With the seeded spaza
-  data, 10 of 22 items come back `lowConfidence` (D11's threshold of 0.6). Candles are
-  flagged because load shedding makes their demand erratic, which is right. But
-  rice, tea, matches, soap and stock cubes are flagged only because they sell 1–3 a day.
-  At that volume, day-to-day Poisson noise alone puts the daily coefficient of variation
-  above 0.67, however steady the item really is. The model's own forecasts for them are
-  close to their 30-day averages. A proposed fix, **not applied, needs a decision**:
-  compute CV on 7-day totals instead of daily sales. That matches the model's 7-day label,
-  and summing 7 days cuts the Poisson noise by √7 while keeping real volatility such as the
-  candle spikes. Until then, the API's fallback applies to those items (ETR-03 working as
-  designed, just more often than it should).
-
-- **O5 — AuthController is not in the UML component list.** FR-02 needs a login
-  endpoint, and putting it in StockController would be wrong (StockController is for
-  signed-in owners only). The implementation adds `AuthController` (`POST /api/auth/login`).
-  **To decide**: add it to the component diagram and record it as an approved change for
-  Q1.2 (recommended), or keep the diagram and record it as a deviation.
-- **O6 — the meaning of "threshold fallback" (ETR-03).** It is implemented as: when the model
-  is not confident, has too little history, or is unreachable, the forecast is replaced by
-  the item's 30-day average demand (the baseline from D6), and the reason is stored. The
-  item's `ReorderLevel` threshold keeps driving alerts either way (D25). **To check** against
-  the wording of ETR-03 in the submitted requirements.
+None open.
 
 Resolved on Mon 28:
 
+- **O4 — the confidence heuristic flagged most slow-moving items.** 10 of 22 seeded
+  items fell back because daily Poisson noise pushed their daily CV past 0.67. **Resolved by
+  D31**: CV is now measured on weekly totals. After the change, 0 of 22 are low-confidence.
+- **O5 — AuthController was not in the UML component list.** **Resolved by D32**: added to
+  the component diagram as an approved change (Q1.2).
+- **O6 — what "threshold-based advice" (ETR-03) means.** ETR-03 does not define the
+  arithmetic. **Resolved by D25**, which now states the exact formula, and by the API response,
+  which labels which path produced each recommendation.
 - **O1 — v1.0-base could not predict spaza-shop volumes.** Found while smoke-testing.
   With flat sales histories, v1.0's output was bounded to about 44–148 units/day. Trees
   cannot extrapolate beyond the targets seen in training, and the Kaggle data's median is
@@ -157,8 +150,8 @@ It is **not a probability** and not a calibrated interval. It is a score that fa
 recent demand gets more erratic. CV 0 → 1.0, CV 1 → 0.5; the 0.6 threshold means CV ≈ 0.67.
 No recent sales → 0. The response carries `lowConfidence: true` below 0.6. Applying the
 fallback is the API's job, per the sequence diagram. Smoke test: a steady item scored
-0.952, an erratic one 0.411 and was flagged. _`lowConfidence` is the field name chosen.
-Check it against the sequence diagram's return message._
+0.952, an erratic one 0.411 and was flagged. `lowConfidence` is the field name chosen
+(confirmed). **Amended by D31:** CV is now computed on weekly totals, not daily sales.
 
 **D12 — `daysSinceRestock` is supplied by the caller and overrides the fallback.** _(Mon 28)_
 In training, the Kaggle data records restocks, so `build_features()` derives this feature.
@@ -289,13 +282,40 @@ list/get/create/update/delete (FR-03), `POST` and `GET /{id}/movements` (FR-04),
 functions (`Domain/StockRules.cs`, `Domain/ReorderCalculator.cs`). That isn't a layer: it's
 what makes them unit-testable without a database. Swagger UI is at `/swagger`.
 
-**D25 — ETR-03 fallback: the 30-day average, with the reason recorded.** _(Mon 28)_
-The model's forecast is used only if the model service answered 200 and `lowConfidence` is
-false. Otherwise the forecast is the item's average daily sales over the last 30 days (the
-same baseline the model was evaluated against, D6), and `FallbackReason` is stored:
-`insufficientHistory` (the model's 422), `lowConfidence`, or `modelUnavailable` (error,
-timeout or unreachable). The owner always gets a recommendation. A model outage degrades it
-and never breaks the screen. See O6.
+**D25 — ETR-03 threshold-based advice: the exact rule.** _(Mon 28; formula fixed Mon 28 evening)_
+ETR-03 requires "threshold-based advice" when the model cannot be relied on, and doesn't
+define the arithmetic. This is the definition the system implements:
+
+Let *s₁ … sₙ* be the item's units sold per day, oldest first, for the *n* complete days before
+today (*n* ≤ 60, starting the day after the item was created; days with no sale count as 0).
+Let *Q* be quantity on hand and *R* the reorder level.
+
+1. **Which path.** The model path is used if and only if the model service answers HTTP 200
+   **and** `lowConfidence` is false (confidence *c* ≥ 0.6, D31). Otherwise the
+   recommendation is threshold-based advice, and the reason is recorded:
+   `insufficientHistory` (model returned 422, *n* < 30), `lowConfidence` (*c* < 0.6), or
+   `modelUnavailable` (any other status, timeout, or unreachable).
+2. **Daily demand *d*.**
+   - Model path: *d* = the model's `predictedDailyDemand`.
+   - Threshold-based advice: *d* = (1/*m*) · Σ *sᵢ* over the last *m* = min(30, *n*) days,
+     i.e. the 30-day average sales, or the average of whatever history exists under 30 days.
+     This is the same naive baseline the model was evaluated against (D6).
+3. **The same arithmetic on both paths (D26):**
+   days until stock-out = round(*Q* / *d*, 1), or none if *d* = 0;
+   recommended quantity = max(0, ⌈7·*d* + *R* − *Q*⌉).
+4. **Alerts are separate.** The `ReorderLevel` threshold raises low-stock alerts (FR-05)
+   on both paths. The fallback changes only the demand estimate.
+
+**How a reader can tell the paths apart.** Every prediction response carries
+`recommendationSource` (`"model"` or `"thresholdBasedAdvice"`, in ETR-03's words),
+`fallbackReason`, and a plain-language `basis` line, for example:
+- `Model forecast (v1.1-relative), confidence 0.77`
+- `Threshold-based advice: 30-day average sales, because the model's confidence 0.44 is below 0.6`
+- `Threshold-based advice: average sales over 13 days, because the model needs at least 30 days of history`
+
+The client should show `basis` next to the recommendation, so a screenshot shows which path
+produced it. `UsedFallback` and `FallbackReason` are stored on every `ReorderPrediction` row.
+A model outage degrades the advice and never breaks the screen.
 
 **D26 — Reorder arithmetic.** _(Mon 28)_
 `daysUntilStockOut = quantityOnHand ÷ dailyDemand` (null if demand is 0), and
@@ -303,9 +323,7 @@ and never breaks the screen. See O6.
 That's a week's forecast demand (one wholesaler cycle, and the model's 7-day horizon) and still
 above the reorder level after it. Pack sizes are not rounded to, because they live in
 SupplierListing (FR-06/07, Partial).
-**Known limitation, for Assignment 4:** the 7-day cover is the same for every item. For bread,
-delivered daily and perishable, the end-to-end run recommends 161 loaves, which is a week's
-demand. A per-item cover period (1 day for bakery items) is the fix.
+The 7-day cover assumes goods keep. That fails for perishables: see limitation **L1**.
 
 **D27 — The model's input is built from the transaction log.** _(Mon 28)_
 `dailySales` = units sold per day for up to 60 days ending yesterday, oldest first, with 0 for days
@@ -330,6 +348,77 @@ seed data.
 each run. So the triggers, CHECK constraints and unique keys under test are the real ones, and an
 EF in-memory provider would not have them. Only the model service is replaced, by a stub, so each
 ETR-03 path can be forced. The real model is exercised by `api/smoke_test.py`.
+
+**D31 — Confidence is measured on weekly totals, not daily sales.** _(Mon 28 evening, resolves O4; amends D11)_
+The formula is *c* = 1 / (1 + σ_w / μ_w). The *w_k* are non-overlapping 7-day sales totals counted
+back from the most recent day, over *K* = min(8, ⌊*n*/7⌋) weeks (an incomplete oldest week is dropped).
+σ_w is the population standard deviation of the *w_k*, μ_w their mean, and *c* = 0 if μ_w = 0.
+`lowConfidence` is *c* < 0.6, and the threshold is unchanged.
+- Why: the model forecasts mean demand over the next 7 days, so week-to-week variability
+  is what matters. Daily counts of a slow mover are mostly Poisson noise. A steady 2-a-day item
+  has a daily CV of about 0.7, so it was always flagged whatever its real predictability.
+- Measured through the API on all 22 seeded items (`evidence/confidence-before-after.txt`):
+
+  | | Model used | lowConfidence fallback | insufficientHistory |
+  |---|---|---|---|
+  | Before (daily CV) | 11 | 10 | 1 |
+  | After (weekly CV) | 21 | 0 | 1 |
+
+- Genuine volatility is still caught. A synthetic week-to-week surge-and-slump history scores
+  0.466 and is flagged (`model-service-smoke.txt`). The candles, whose 8-week window includes a
+  load-shedding spike, now score **0.62**: just above the threshold, so the model is used. So no
+  seeded item currently shows the low-confidence path. It is exercised by the tests and the
+  model smoke test instead. This wasn't tuned away, and the seed wasn't adjusted to force it.
+- The old smoke-test "erratic" case, alternating on a 10-day cycle, now scores 0.91. That is
+  correct, because its weekly totals barely move. It was replaced by a week-to-week volatile case.
+- Latency after the change: p95 84.9 ms on a first run just after a container rebuild, and
+  72.7 ms on the re-run that is recorded. The change adds a reshape and a sum.
+
+**D32 — AuthController is added to the component diagram.** _(Mon 28 — approved change since Assignment 2, for Q1.2)_
+The submitted component diagram lists InventoryDashboard, StockController, InventoryRepository
+and ReorderPredictionService. FR-02 needs a login endpoint that works *before* the user is
+signed in, and StockController is restricted to signed-in Business Owners
+(`[Authorize(Roles = "BusinessOwner")]`). So login gets its own component, `AuthController`
+(`POST /api/auth/login`), which issues the JWT that StockController requires. It reads users
+through InventoryRepository like StockController does. The diagram is updated to add
+AuthController between InventoryDashboard and InventoryRepository. Recorded as an approved
+change, not a deviation.
+
+---
+
+## 2a. Known limitations (for Assignment 3 Q5.4 and Assignment 4 Q4.3)
+
+**L1 — The reorder formula assumes goods keep; perishables get a week's order.**
+- *What happens:* recommended quantity covers 7 days of demand for every item (D26). For
+  Albany Brown Bread 700g (22.1 loaves/day forecast, 0 on hand, reorder level 6), the
+  end-to-end run recommends **161 loaves** (`evidence/api-endpoints.txt`). Bread is delivered
+  by the bakery every morning and is stale within about 2–3 days, so most of that order would
+  be thrown away. The same applies to milk, amasi and eggs, at longer shelf lives.
+- *Why:* the cover period stands in for the wholesaler cycle and matches the model's 7-day
+  horizon. It is a sound assumption for maize meal or tinned fish and a false one for fresh goods.
+  The forecast is fine; the arithmetic built on it isn't.
+- *Corrective action:* add a per-item shelf-life field, `StockItem.ShelfLifeDays` (nullable,
+  null = keeps), and cap the cover period by it:
+  recommended quantity = max(0, ⌈*d* · min(7, *L*) + *R* − *Q*⌉), where *L* = ShelfLifeDays.
+  For bread (*L* = 2) the same forecast gives ⌈22.1 × 2 + 6 − 0⌉ = **51 loaves**. That's two
+  days' demand plus the reorder level, in line with daily bakery deliveries. It needs one
+  column, one line in `ReorderCalculator.RecommendedQuantity`, and a field on the stock form,
+  and it is planned for Assignment 4.
+
+**L2 — Accuracy was measured at Kaggle scale, not at spaza scale.** The 10.53% MAPE comes from a
+held-out period of the Kaggle retail data (median 84 units/day). At spaza volumes the evidence
+is that the forecast *follows the item's own level* (−4% at every scale, D16), not a measured
+MAPE. There is no real spaza sales history to measure against. *Corrective action:* re-evaluate
+on a pilot shop's own transaction log once it has a few months of history, and retrain on it.
+
+**L3 — Confidence is a heuristic, not a probability.** It reflects week-to-week variability
+(D31). It isn't calibrated against forecast error, and the 0.6 threshold is a judgement call.
+The candles sit at 0.62, just above it. *Corrective action:* once real forecast errors
+accumulate in `ReorderPrediction`, calibrate the threshold against observed error.
+
+**L4 — The seed data is simulated.** It is realistic by construction (D23) and verified for
+consistency, but it isn't real trading data. Screens and predictions demonstrate behaviour,
+not real-world accuracy.
 
 ---
 
@@ -359,6 +448,7 @@ ETR-03 path can be forced. The real model is exercised by `api/smoke_test.py`.
 | `api/IntelliStock.Api/Domain/` | Pure rules: movements and alerts (`StockRules`), reorder arithmetic (`ReorderCalculator`), SA time (`Clock`). |
 | `api/IntelliStock.Api.Tests/` | `Unit/` (no database) and `Integration/` (real MySQL, stub model). |
 | `api/smoke_test.py` | End-to-end check against the running stack → `evidence/api-endpoints.txt`. |
+| `api/confidence_check.py` | Which path every seeded item's recommendation takes → `evidence/confidence-before-after.txt`. |
 | `docker-compose.yml` | MySQL 8 (host port 3308), model service (8000), API (5000); client to be added. |
 | `evidence/` | Everything Assignment 3 cites. Checklist in `evidence/README.md`. |
 
@@ -414,6 +504,12 @@ MAPE 10.51% vs 22.18% baseline (`86de1ea`).
   serialised with a `Z` (UTC) although they are SA time. Both fixed. 37 unit and 32 integration
   tests pass. Only the .NET 9 SDK is installed on this machine, and it builds the `net8.0`
   target. The .NET 8 runtime is installed; the Docker image uses the official 8.0 SDK.
+- Evening: FR-10 defined (order placement and status tracking), marked Not met, deferred.
+  Confidence moved to weekly totals (D31): low-confidence fallbacks went from 10 of 22 to 0 of 22.
+  The API now labels each recommendation's source (`recommendationSource`, `basis`) and D25
+  states the exact threshold-based-advice formula. AuthController recorded as an approved change
+  (D32). Limitations written up (L1–L4). 41 unit and 32 integration tests pass; end-to-end
+  15/15; model smoke 9/9. Build freeze.
 - Fixed the README: schedule dates now match their 2026 weekdays, file tree matches the
   real files, scope note shows FR-01 and FR-06/07 as Partial.
 
@@ -448,6 +544,12 @@ MAPE 10.51% vs 22.18% baseline (`86de1ea`).
 - **Is the seed data real?** No, and say so. It is simulated (D23), from a fixed seed, with
   the behaviour of a real spaza shop built in: payday peaks, bakery deliveries, the missed
   Heritage Day trip. It is internally consistent by construction and verified by query.
+- **How does the owner know whether a recommendation came from the model?** D25. Every
+  response says so (`recommendationSource`, `basis`), and the screen shows the basis line.
+- **What's the biggest limitation?** L1. Be concrete: 161 loaves of bread, and the
+  one-field fix that makes it 51.
+- **Why did you change the confidence measure?** D31: daily noise was mistaken for
+  unpredictability. Quote the before/after table.
 - **What happens if the model service is down?** D25. The owner still gets a
   recommendation from the 30-day average, labelled as a fallback. The integration tests force
   a 500, a 503 and a refused connection.

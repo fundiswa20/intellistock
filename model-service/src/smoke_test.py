@@ -17,7 +17,9 @@ from datetime import datetime
 EVIDENCE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "evidence")
 
 STEADY = [40, 42, 38, 45, 41, 39, 44, 43, 40, 42] * 4      # 40 days, mean 41.4
-ERRATIC = [0, 90, 5, 0, 120, 10, 0, 0, 80, 3] * 4
+# volatile week to week: two normal weeks, a surge week, two normal, a slump week (42 days).
+# Confidence is measured on weekly totals (D31), so day-to-day noise alone is not "erratic".
+ERRATIC = [10] * 14 + [60] * 7 + [10] * 14 + [2] * 7
 
 
 def item(stock_item_id, sales, days_since_restock=4, **extra):
@@ -29,7 +31,7 @@ CASES = [
     ("GET /health", "GET", "/health", None, 200),
     ("POST /predict - steady demand (mean 41.4/day), default model",
      "POST", "/predict", item(1, STEADY), 200),
-    ("POST /predict - erratic demand, expect lowConfidence=true (ETR-03)",
+    ("POST /predict - demand volatile week to week, expect lowConfidence=true (ETR-03)",
      "POST", "/predict", item(2, ERRATIC, 12), 200),
     ("POST /predict - modelId v1.0-base still served",
      "POST", "/predict", item(1, STEADY, modelId="v1.0-base"), 200),

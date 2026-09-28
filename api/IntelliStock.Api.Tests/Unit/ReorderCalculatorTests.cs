@@ -58,6 +58,27 @@ public class ReorderCalculatorTests
         double demand, int onHand, int reorderLevel, int expected) =>
         Assert.Equal(expected, RecommendedQuantity(demand, onHand, reorderLevel));
 
+    // ETR-03: the response must say which path produced the recommendation
+
+    [Fact]
+    public void A_model_recommendation_is_labelled_as_the_model_with_its_version_and_confidence()
+    {
+        Assert.Equal("model", Source(null));
+        Assert.Equal("Model forecast (v1.1-relative), confidence 0.77", Basis(null, "v1.1-relative", 0.771m, 60));
+    }
+
+    [Theory]
+    [InlineData("lowConfidence", "because the model's confidence 0.44 is below 0.6")]
+    [InlineData("insufficientHistory", "average sales over 13 days, because the model needs at least 30 days of history")]
+    [InlineData("modelUnavailable", "because the prediction service could not be reached")]
+    public void A_fallback_is_labelled_threshold_based_advice_with_the_reason(string reason, string expected)
+    {
+        Assert.Equal("thresholdBasedAdvice", Source(reason));
+        var basis = Basis(reason, null, reason == "lowConfidence" ? 0.44m : null, 13);
+        Assert.StartsWith("Threshold-based advice:", basis);
+        Assert.Contains(expected, basis);
+    }
+
     [Fact]
     public void Days_since_restock_counts_from_the_last_restock_or_else_creation()
     {

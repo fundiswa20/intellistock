@@ -1,0 +1,61 @@
+IntelliStock - which path produced each recommendation (confidence heuristic change)
+====================================================================================
+Every Nomvula's Spaza item through POST /api/stock/{id}/prediction, real model service.
+model = the model's forecast was used; lowConfidence / insufficientHistory = ETR-03 fallback.
+
+--- BEFORE - confidence from daily sales (CV of 30 daily values) --- run at 2026-09-28 19:36, model v1.1-relative
+   id  item                              conf  demand/day  path
+  ------------------------------------------------------------------------
+    1  Albany Brown Bread 700g           0.70       22.10  model
+    2  Sasko White Bread 700g            0.69       13.16  model
+    3  Iwisa Super Maize Meal 5kg        0.58        2.87  lowConfidence
+    4  White Star Maize Meal 2.5kg       0.59        3.63  lowConfidence
+    5  Selati White Sugar 2kg            0.60        2.70  lowConfidence
+    6  Tastic Rice 2kg                   0.58        1.70  lowConfidence
+    7  Sunfoil Cooking Oil 750ml         0.69        2.54  model
+    8  Clover Long Life Milk 1L          0.66        5.73  model
+    9  Large Eggs 6-pack                 0.62        4.40  model
+   10  Coca-Cola 2L                      0.69        5.25  model
+   11  Simba Chips 36g                   0.78       19.49  model
+   12  Lucky Star Pilchards 400g         0.64        2.40  model
+   13  Koo Baked Beans 410g              0.60        2.50  lowConfidence
+   14  Joko Tea 100 bags                 0.52        0.90  lowConfidence
+   15  Knorrox Beef Stock Cubes 24       0.60        2.00  lowConfidence
+   16  Royco Soup Powder 50g             0.67        4.89  model
+   17  Sunlight Bar Soap 175g            0.57        2.10  lowConfidence
+   18  Lion Matches 10-pack              0.54        1.40  lowConfidence
+   19  Household Candles 6-pack          0.44        1.67  lowConfidence
+   20  Paraffin 1L                       0.61        2.56  model
+   21  Inkomazi Amasi 2L                 0.67        2.67  model
+   22  Fatti's & Moni's Spaghetti 500g               1.85  insufficientHistory
+
+  insufficientHistory: 1, lowConfidence: 10, model: 11  (of 22)
+
+--- AFTER - confidence from weekly sales (CV of up to 8 non-overlapping 7-day totals) --- run at 2026-09-28 19:37, model v1.1-relative
+   id  item                              conf  demand/day  path
+  ------------------------------------------------------------------------
+    1  Albany Brown Bread 700g           0.91       22.10  model
+    2  Sasko White Bread 700g            0.93       13.16  model
+    3  Iwisa Super Maize Meal 5kg        0.77        3.41  model
+    4  White Star Maize Meal 2.5kg       0.77        4.31  model
+    5  Selati White Sugar 2kg            0.81        2.88  model
+    6  Tastic Rice 2kg                   0.88        1.50  model
+    7  Sunfoil Cooking Oil 750ml         0.84        2.54  model
+    8  Clover Long Life Milk 1L          0.83        5.73  model
+    9  Large Eggs 6-pack                 0.87        4.40  model
+   10  Coca-Cola 2L                      0.87        5.25  model
+   11  Simba Chips 36g                   0.93       19.49  model
+   12  Lucky Star Pilchards 400g         0.81        2.40  model
+   13  Koo Baked Beans 410g              0.80        3.00  model
+   14  Joko Tea 100 bags                 0.84        0.96  model
+   15  Knorrox Beef Stock Cubes 24       0.84        1.61  model
+   16  Royco Soup Powder 50g             0.82        4.89  model
+   17  Sunlight Bar Soap 175g            0.77        2.86  model
+   18  Lion Matches 10-pack              0.78        1.82  model
+   19  Household Candles 6-pack          0.62        1.05  model
+   20  Paraffin 1L                       0.80        2.56  model
+   21  Inkomazi Amasi 2L                 0.89        2.67  model
+   22  Fatti's & Moni's Spaghetti 500g               1.85  insufficientHistory
+
+  insufficientHistory: 1, model: 21  (of 22)
+

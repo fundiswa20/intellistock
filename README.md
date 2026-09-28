@@ -108,8 +108,10 @@ rest of the plan used.
 
 ## Scope note
 
-In scope and built in full: FR-02 login, FR-03 stock item CRUD, FR-04 stock movements
-with an immutable transaction log, FR-05 low-stock alerts, FR-08 reorder prediction.
+In scope and built: FR-02 login, FR-03 stock item CRUD, FR-04 stock movements with an
+immutable transaction log, FR-05 low-stock alerts, FR-08 reorder prediction. All five are
+implemented and tested in the API; client screens follow (see the traceability table in
+`docs/BUILD-JOURNAL.md`).
 
 Partial:
 - FR-01 registration — users are seeded; there is no registration UI.
@@ -118,6 +120,8 @@ Partial:
 
 Not met:
 - FR-09 — consolidated reorder plan, deferred.
+- FR-10 — order placement and status tracking, deferred; ordering is not part of the
+  prototype scope.
 
 These are recorded the same way in the Assignment 3 traceability matrix. See
 `docs/BUILD-JOURNAL.md` for current status.

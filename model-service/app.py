@@ -35,7 +35,7 @@ DEFAULT_MODEL_ID = os.environ.get("DEFAULT_MODEL_ID", "v1.1-relative")
 MIN_HISTORY_DAYS = 30          # ETR-03: fewer than this and the 30-day features are not meaningful
 MAX_HISTORY_DAYS = 730         # only the last 31 days are used; this bounds the payload
 CONFIDENCE_THRESHOLD = 0.6     # ETR-03: below this the caller applies the threshold fallback
-CONFIDENCE_WINDOW = 30         # days of recent demand the confidence heuristic looks at
+CONFIDENCE_WEEKS = 8           # up to 8 most recent complete weeks feed the confidence heuristic
 
 MODEL_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 
@@ -91,20 +91,33 @@ class PredictResponse(BaseModel):
 
 def confidence_from_history(daily_sales):
     """
-    Confidence heuristic: 1 / (1 + CV) over the last CONFIDENCE_WINDOW days,
-    where CV is the coefficient of variation (std / mean) of daily demand.
+    Confidence heuristic: 1 / (1 + CV), where CV is the coefficient of variation
+    (population std / mean) of WEEKLY demand - non-overlapping 7-day totals counted
+    back from the most recent day, over up to CONFIDENCE_WEEKS weeks. An incomplete
+    oldest week is dropped. 30 days of history gives 4 weeks; 60 days gives 8.
 
     This is NOT a probability and NOT a calibrated prediction interval. It is a
     0-1 score that falls as recent demand becomes more erratic, because erratic
     demand is where a point forecast is least trustworthy. CV = 0 gives 1.0,
     CV = 1 gives 0.5, and the 0.6 threshold corresponds to CV of about 0.67.
     An item with no recent sales scores 0.
+
+    Why weekly, not daily (BUILD-JOURNAL O4/D31): the model forecasts mean demand
+    over the next 7 days, so the variability that matters is week to week. Daily
+    counts of a slow mover are dominated by Poisson noise - an item selling a
+    steady 2 a day has a daily CV of about 0.7 and would always be flagged - and
+    summing 7 days removes most of that noise while keeping genuine volatility,
+    such as a load-shedding week that multiplies candle sales.
     """
-    recent = np.asarray(daily_sales[-CONFIDENCE_WINDOW:], dtype=float)
-    mean = recent.mean()
+    sales = np.asarray(daily_sales, dtype=float)
+    weeks = min(CONFIDENCE_WEEKS, len(sales) // 7)
+    if weeks < 1:
+        return 0.0
+    weekly = sales[len(sales) - weeks * 7:].reshape(weeks, 7).sum(axis=1)
+    mean = weekly.mean()
     if mean <= 0:
         return 0.0
-    cv = recent.std() / mean
+    cv = weekly.std() / mean
     return float(1.0 / (1.0 + cv))
 
 

@@ -40,6 +40,29 @@ public static class ReorderCalculator
     public static int RecommendedQuantity(double dailyDemand, int onHand, int reorderLevel) =>
         Math.Max(0, (int)Math.Ceiling(dailyDemand * CoverDays + reorderLevel - onHand));
 
+    public const double ConfidenceThreshold = 0.6;   // ETR-03; applied by the model service's lowConfidence flag
+
+    // ETR-03 names the non-model path "threshold-based advice"; the response uses the same words
+    public const string SourceModel = "model";
+    public const string SourceThresholdAdvice = "thresholdBasedAdvice";
+
+    public static string Source(string? fallbackReason) =>
+        fallbackReason is null ? SourceModel : SourceThresholdAdvice;
+
+    // One plain-language line saying which path produced the recommendation and why,
+    // so the owner - and a screenshot - can tell the model's advice from the fallback.
+    public static string Basis(string? fallbackReason, string? modelVersion, decimal? confidence, int? historyDays) =>
+        fallbackReason switch
+        {
+            null => $"Model forecast ({modelVersion}), confidence {confidence:0.00}",
+            "lowConfidence" =>
+                $"Threshold-based advice: 30-day average sales, because the model's confidence {confidence:0.00} is below {ConfidenceThreshold:0.0}",
+            "insufficientHistory" => historyDays is null
+                ? "Threshold-based advice: 30-day average sales, because the model needs at least 30 days of sales history"
+                : $"Threshold-based advice: average sales over {historyDays} days, because the model needs at least 30 days of history",
+            _ => "Threshold-based advice: 30-day average sales, because the prediction service could not be reached",
+        };
+
     // Days since the last restock, or since the item was created if it was never restocked.
     public static int DaysSinceRestock(DateOnly? lastRestock, DateOnly created, DateOnly asOf) =>
         Math.Max(0, asOf.DayNumber - (lastRestock ?? created).DayNumber);
