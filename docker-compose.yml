@@ -6,7 +6,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-devpassword}
       MYSQL_DATABASE: ${DB_NAME:-intellistock}
     ports:
-      - "3306:3306"
+      - "${DB_PORT:-3308}:3306"   # host 3306/3307 are taken on the dev machine (local MySQL80, another project)
     volumes:
       - db-data:/var/lib/mysql
       - ./db/init:/docker-entrypoint-initdb.d

@@ -28,7 +28,8 @@ intellistock/
 │   └── app.py            FastAPI service: POST /predict, GET /health, GET /models/{id}
 ├── api/                  ASP.NET Core 8 Web API
 ├── client/               Angular 17 client
-├── db/init/              MySQL schema and seed data
+├── db/init/              MySQL schema (01) and generated seed data (02)
+├── db/seed/              seed data generator
 ├── evidence/             test output, screenshots, metrics for Assignment 3
 ├── docs/                 BUILD-JOURNAL.md, diagrams and written documentation
 └── docker-compose.yml    runs the whole system locally
@@ -56,9 +57,13 @@ python src/make_synthetic.py 20 400
 # 2. once the Kaggle dataset is downloaded into model-service/data/
 python src/inspect_dataset.py data/<downloaded-file>.csv
 
-# 3. run the services
+# 3. run the services (MySQL loads db/init/*.sql on first start)
 cd ..
 docker compose up --build
+
+# optional: regenerate seed data, then verify the database
+python db/seed/generate_seed.py
+bash db/verify.sh
 ```
 
 | Service | URL |
@@ -66,7 +71,7 @@ docker compose up --build
 | Model service | http://localhost:8000/docs |
 | API | http://localhost:5000 (not built yet) |
 | Client | http://localhost:4200 (not built yet) |
-| MySQL | localhost:3306 |
+| MySQL | localhost:3308 (container port 3306; set DB_PORT to change) |
 
 ## Dataset
 

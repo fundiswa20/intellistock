@@ -14,7 +14,7 @@ _Last updated: Mon 28 Sep 2026._
 |---|---|---|
 | Model training + evaluation | — | **Done.** Default model `v1.1-relative`: MAPE 10.53% vs 22.18% baseline, works at any sales volume (D16). `v1.0-base` (10.51%) kept. |
 | Model service | ReorderPredictionService | **Done.** `POST /predict`, `GET /health`, `GET /models/{id}`, running in Docker Compose. p95 latency 69.9 ms. |
-| MySQL schema + seed | — | Not started. |
+| MySQL schema + seed | all 8 UML classes | **Done.** 8 tables, FR-04 immutability enforced by triggers, 120 days of spaza-shop history (5,570 transactions). Verified: `evidence/db-verification.txt`. |
 | API | StockController, InventoryRepository | Not started. |
 | Client | InventoryDashboard | Not started. |
 
@@ -35,7 +35,19 @@ _Last updated: Mon 28 Sep 2026._
 
 **Open issues**
 
-None blocking. Resolved on Mon 28:
+- **O4 — the confidence heuristic flags most slow-moving items.** With the seeded spaza
+  data, 10 of 22 items come back `lowConfidence` (D11's threshold of 0.6). Candles are
+  flagged because load shedding makes their demand erratic, which is right. But
+  rice, tea, matches, soap and stock cubes are flagged only because they sell 1–3 a day.
+  At that volume, day-to-day Poisson noise alone puts the daily coefficient of variation
+  above 0.67, however steady the item really is. The model's own forecasts for them are
+  close to their 30-day averages. A proposed fix, **not applied, needs a decision**:
+  compute CV on 7-day totals instead of daily sales. That matches the model's 7-day label,
+  and summing 7 days cuts the Poisson noise by √7 while keeping real volatility such as the
+  candle spikes. Until then, the API's fallback applies to those items (ETR-03 working as
+  designed, just more often than it should).
+
+Resolved on Mon 28:
 
 - **O1 — v1.0-base could not predict spaza-shop volumes.** Found while smoke-testing.
   With flat sales histories, v1.0's output was bounded to about 44–148 units/day. Trees
@@ -213,6 +225,50 @@ The implementation returns only demand (`predictedDailyDemand`, `confidence`,
   computed there anyway for the fallback case.
 This is a deliberate improvement on the diagram, recorded as an approved change, not a deviation.
 
+**D18 — The schema is owned by SQL scripts, not EF Core migrations.** _(Mon 28)_
+`db/init/01-schema.sql` creates the tables, and the MySQL container runs it on first start.
+EF Core (Pomelo) maps onto that schema and does not generate it. The FR-04 immutability
+triggers, CHECK constraints and the generated `Alert.OpenFlag` column are all plain SQL.
+Keeping them in one reviewable file means the rules are visible in one place, and the
+database enforces them even against a bug in the API. Table and column names match the UML
+classes exactly. `Transaction` is a MySQL keyword, so it is always backtick-quoted.
+Inheritance is table-per-type: `BusinessOwner` and `Supplier` share `RegisteredUser`'s key.
+
+**D19 — FR-04 immutability is enforced by the database.** _(Mon 28)_
+`BEFORE UPDATE` and `BEFORE DELETE` triggers on `Transaction` raise SQLSTATE 45000. A wrong
+entry is corrected with a new `Adjustment` row, the way an accounting ledger is. CHECK
+constraints make a Sale negative and a Restock positive, and keep stock from going negative.
+`QuantityAfter` stores the running balance, so the log can be audited against
+`StockItem.QuantityOnHand`. `db/verify.sh` proves both hold (0 mismatches over 5,570 rows) and
+that 7 forbidden statements are rejected.
+
+**D20 — FR-03 delete is a soft delete.** _(Mon 28)_
+`StockItem.IsActive = 0`. A hard delete would have to delete the item's transactions, which
+D19 forbids, and the foreign key blocks it anyway (tested).
+
+**D21 — FR-05: one open alert per item, raised at or below the reorder level.** _(Mon 28)_
+An alert is raised when a movement takes `QuantityOnHand` to or below `ReorderLevel`, and
+resolved when a restock takes it back above. A unique key on `(StockItemId, OpenFlag)`, where
+`OpenFlag` is 1 while unresolved and NULL after, stops duplicates at the database level. The
+seed generator applies the same rule, so seeded alert history is consistent with what the
+API will produce.
+
+**D22 — Passwords use ASP.NET Core Identity's `PasswordHasher` (v3: PBKDF2-HMAC-SHA512, 100,000 iterations).** _(Mon 28, FR-02)_
+It is part of the ASP.NET Core shared framework, so it needs no extra package, and its format is
+documented. The seed generator produces compatible hashes with Python's standard library.
+Test credentials for the seeded users are in the header of `db/init/02-seed.sql`.
+
+**D23 — Seed data is simulated, not hand-written.** _(Mon 28)_
+`db/seed/generate_seed.py` simulates 120 days of Nomvula's Spaza (Khayelitsha, 22 items) and
+60 days of Sipho's Tuck Shop (Soshanguve, 6 items, there to prove owners see only their own
+stock), from a fixed random seed. It includes weekday and month-end payday and grant-day
+peaks, bakery deliveries Mon–Sat, and wholesaler trips on Mon and Thu that are skipped on public holidays.
+The missed Heritage Day trip (Thu 24 Sep) is why 8 items are low at the end. It also
+simulates load-shedding weeks for candles, winter demand for paraffin, lost sales at a
+stock-out, and one item added on 14 Sep so it has too little history. Everything is
+Groceries (O2). Real brand names are used for product names only; the shops, owners and
+suppliers are fictional, with `.test` email domains.
+
 ---
 
 ## 3. File guide
@@ -231,7 +287,11 @@ This is a deliberate improvement on the diagram, recorded as an approved change,
 | `model-service/src/make_synthetic.py` | Stand-in data with the Kaggle file's shape. |
 | `model-service/models/v1.1-relative.joblib` | Default model artefact: model, feature columns, target type, category map, metrics (git-ignored). |
 | `model-service/models/v1.0-base.joblib` | Original absolute model, kept unmodified (git-ignored). |
-| `docker-compose.yml` | MySQL 8 and the model service; api and client to be added. |
+| `db/init/01-schema.sql` | Schema: 8 tables named after the UML classes, triggers, constraints. |
+| `db/init/02-seed.sql` | Seed data. Generated; do not edit by hand. Test logins in its header. |
+| `db/seed/generate_seed.py` | Simulates the spaza-shop history and writes `02-seed.sql`. |
+| `db/verify.sql`, `db/verify.sh` | Consistency checks and constraint tests → `evidence/db-verification.txt`, `evidence/schema.sql`. |
+| `docker-compose.yml` | MySQL 8 (host port 3308) and the model service; api and client to be added. |
 | `evidence/` | Everything Assignment 3 cites. Checklist in `evidence/README.md`. |
 
 ---
@@ -267,6 +327,18 @@ MAPE 10.51% vs 22.18% baseline (`86de1ea`).
 - Recorded D17: `daysUntilStockOut` moves from the model service to the API.
 - Build freeze is today; Assignment 3 is due Wed 30 Sep. Priority from here: database →
   API → Angular, as a thin working slice.
+- Database: schema (D18–D21), password hashing (D22), seed generator (D23). First seed run
+  left 8 items at exactly 0, because the simulated owner kept too thin a buffer. That censors
+  demand (a stock-out records 0 sales), so a safety buffer was added. Now only bread sells
+  out, on Sundays with no bakery, and candles during load shedding.
+- Host ports 3306 (a local MySQL80 service) and 3307 (another project's container) were
+  taken, so MySQL is published on **3308**. Port 4200, planned for the Angular client, is also
+  taken by another project's container.
+- `db/verify.sh`: 0 mismatches on all three consistency checks. All 7 forbidden statements
+  are rejected by the database.
+- Ran every seeded item through the model service: good forecasts (bread 22.3 against a
+  23.1/day average, chips 21.0 against 21.1), the new item → 422, but 10 of 22 flagged
+  low-confidence. Recorded as O4.
 - Fixed the README: schedule dates now match their 2026 weekdays, file tree matches the
   real files, scope note shows FR-01 and FR-06/07 as Partial.
 
@@ -295,5 +367,11 @@ MAPE 10.51% vs 22.18% baseline (`86de1ea`).
 - **Where did 72.9 ms come from?** 100 sequential requests after 5 warm-ups, client wall
   clock, service in Docker on the same machine (`evidence/latency-p95.txt`).
 - **Why no repository layer, when the UML shows InventoryRepository?** D15 and O3.
+- **How do you know the transaction log really is immutable?** D19. The database rejects
+  the UPDATE and DELETE itself (`evidence/db-verification.txt`), so it doesn't depend on
+  the API behaving.
+- **Is the seed data real?** No, and say so. It is simulated (D23), from a fixed seed, with
+  the behaviour of a real spaza shop built in: payday peaks, bakery deliveries, the missed
+  Heritage Day trip. It is internally consistent by construction and verified by query.
 - **Why are FR-06, FR-07 and FR-09 not fully met?** Scope was cut to protect the core
   prediction flow. They are recorded as Partial/Not met, not omitted.

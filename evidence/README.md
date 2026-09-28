@@ -22,7 +22,8 @@ Name files with the question number they answer, so they drop straight into the 
 | `latency-p95.txt` — 100 timed requests, v1.1-relative default | **5.2, 2.3** | Tue 22 | ☑ Mon 28 |
 | `latency-p95-v1.0-base.txt` — same test, v1.0-base default | 5.2 | — | ☑ Mon 28 |
 | `erd.png` — entity relationship diagram | 4.2 | Wed 23 | ☐ |
-| `schema.sql` — final schema | 4.2 | Wed 23 | ☐ |
+| `schema.sql` — final schema (mysqldump of the live database) | 4.2 | Wed 23 | ☑ Mon 28 |
+| `db-verification.txt` — row counts, consistency checks, rejected statements | **4.2, 5.1** | — | ☑ Mon 28 |
 | `api-postman.png` — endpoints returning real data | 4.3 | Fri 25 | ☐ |
 | `tests-unit.txt` — `dotnet test` output to file | **5.1** | Fri 25 | ☐ |
 | `tests-integration.txt` | **5.1** | Fri 25 | ☐ |
