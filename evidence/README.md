@@ -8,24 +8,28 @@ Name files with the question number they answer, so they drop straight into the 
 
 ## Checklist
 
-| File | Question | Captured on | Done |
+| File | Question | Planned | Done |
 |---|---|---|---|
-| `dataset-inspection.txt` | 4.2 | Sun 21 | ☐ |
-| `model-evaluation.txt` — MAPE, baseline MAPE, improvement, test period, row counts | **5.2, 2.3** | Mon 22 | ☐ |
-| `model-feature-importance.png` | 4.1 | Mon 22 | ☐ |
-| `latency-p95.txt` — 100 timed requests | **5.2, 2.3** | Tue 23 | ☐ |
-| `erd.png` — entity relationship diagram | 4.2 | Wed 24 | ☐ |
-| `schema.sql` — final schema | 4.2 | Wed 24 | ☐ |
-| `api-postman.png` — endpoints returning real data | 4.3 | Fri 26 | ☐ |
-| `tests-unit.txt` — `dotnet test` output to file | **5.1** | Fri 26 | ☐ |
-| `tests-integration.txt` | **5.1** | Fri 26 | ☐ |
-| `4.1-login.png` | 4.1, 5.3 | Sat 27 | ☐ |
-| `4.1-stock-list.png` | 4.1, 5.3 | Sat 27 | ☐ |
-| `4.1-stock-item-recommendation.png` — the money shot | **4.1, 5.3** | Sat 27 | ☐ |
-| `4.1-alerts.png` | 4.1, 5.3 | Sat 27 | ☐ |
-| `response-times.txt` — page load measurements | **5.2** | Sun 28 | ☐ |
-| `docker-compose-up.png` — all services running | 4.4 | Sun 28 | ☐ |
-| `git-log.txt` — `git log --oneline` | 4.1 | Mon 29 | ☐ |
+| `dataset-inspection.txt` | 4.2 | Sun 20 | ☑ committed Mon 21 |
+| `model-evaluation.txt` — MAPE, baseline MAPE, improvement, test period, row counts | **5.2, 2.3** | Mon 21 | ☑ Mon 21, re-run Mon 28 (identical metrics) |
+| `model-feature-importance.png` | 4.1 | Mon 21 | ☑ Mon 21, regenerated Mon 28 |
+| `model-serving-parity.txt` — serving features identical to training features | 4.1, 5.1 | — | ☑ Mon 28 |
+| `model-service-smoke.txt` — every endpoint and error path, incl. 422 | 5.1 | — | ☑ Mon 28 |
+| `latency-p95.txt` — 100 timed requests | **5.2, 2.3** | Tue 22 | ☑ Mon 28 |
+| `erd.png` — entity relationship diagram | 4.2 | Wed 23 | ☐ |
+| `schema.sql` — final schema | 4.2 | Wed 23 | ☐ |
+| `api-postman.png` — endpoints returning real data | 4.3 | Fri 25 | ☐ |
+| `tests-unit.txt` — `dotnet test` output to file | **5.1** | Fri 25 | ☐ |
+| `tests-integration.txt` | **5.1** | Fri 25 | ☐ |
+| `4.1-login.png` | 4.1, 5.3 | Sat 26 | ☐ |
+| `4.1-stock-list.png` | 4.1, 5.3 | Sat 26 | ☐ |
+| `4.1-stock-item-recommendation.png` — the money shot | **4.1, 5.3** | Sat 26 | ☐ |
+| `4.1-alerts.png` | 4.1, 5.3 | Sat 26 | ☐ |
+| `response-times.txt` — page load measurements | **5.2** | Sun 27 | ☐ |
+| `docker-compose-up.png` — all services running | 4.4 | Sun 27 | ☐ |
+| `git-log.txt` — `git log --oneline` | 4.1 | Mon 28 | ☐ |
+
+Dates are 2026 and match the corrected schedule in the top-level README.
 
 ## Rules
 
@@ -49,5 +53,9 @@ commit history itself shows sustained work.
 Record these honestly rather than leaving them blank. A requirement marked Not met with
 a one-line reason scores; a requirement silently omitted does not.
 
+Partial:
+- FR-01 — users are seeded; no registration UI
 - FR-06, FR-07 — supplier data seeded directly; no supplier interface built
+
+Not met:
 - FR-09 — consolidated reorder plan deferred

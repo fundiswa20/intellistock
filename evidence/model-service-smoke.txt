@@ -1,0 +1,38 @@
+IntelliStock - model service smoke test
+================================================================
+Run at : 2026-09-28 17:47
+Target : http://localhost:8000 (docker compose service 'model-service')
+
+[PASS] GET /health
+       HTTP 200 (expected 200)
+       {"status": "ok", "defaultModel": "v1.0-base", "defaultModelLoaded": true, "modelsLoaded": ["v1.0-base"]}
+
+[PASS] POST /predict - steady demand, 40 days
+       HTTP 200 (expected 200)
+       {"predictedDailyDemand": 53.509, "confidence": 0.952, "lowConfidence": false, "modelVersion": "v1.0-base", "sufficientHistory": true}
+
+[PASS] POST /predict - erratic demand, expect lowConfidence=true (ETR-03)
+       HTTP 200 (expected 200)
+       {"predictedDailyDemand": 52.151, "confidence": 0.411, "lowConfidence": true, "modelVersion": "v1.0-base", "sufficientHistory": true}
+
+[PASS] POST /predict - explicit modelId
+       HTTP 200 (expected 200)
+       {"predictedDailyDemand": 53.509, "confidence": 0.952, "lowConfidence": false, "modelVersion": "v1.0-base", "sufficientHistory": true}
+
+[PASS] POST /predict - 29 days of history, expect 422 insufficientHistory (ETR-03)
+       HTTP 422 (expected 422)
+       {"error": "insufficientHistory"}
+
+[PASS] POST /predict - unknown modelId, expect 404
+       HTTP 404 (expected 404)
+       {"detail": "Unknown model 'v9.9'"}
+
+[PASS] GET /models/v1.0-base - stored metrics
+       HTTP 200 (expected 200)
+       {"modelId": "v1.0-base", "version": "v1.0-base", "trainedAt": "2026-09-28T17:37:11", "featureColumns": ["roll_mean_7", "roll_mean_14", "roll_mean_30", "roll_std_7", "roll_std_30", "trend_7_30", "day_of_week", "day_of_month", "month", "is_month_end_window", "days_since_restock", "category_code"], "categories": ["Clothing", "Electronics", "Furniture", "Groceries", "Toys"], "metrics": {"mape": 10.509, "baseline_mape": 22.175, "improvement_pct": 52.61, "mae": 8.038, "test_rows": 14900, "test_start": "2023-09-03", "test_end": "2024-01-29"}}
+
+[PASS] GET /models/..%2Fapp - path traversal refused, expect 404
+       HTTP 404 (expected 404)
+       {"detail": "Not Found"}
+
+8 of 8 checks passed

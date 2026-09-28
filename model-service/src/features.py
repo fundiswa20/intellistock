@@ -112,13 +112,21 @@ def load_and_standardise(path):
             .reset_index(drop=True))
     return df
 
+def category_mapping(df):
+    """Stable category -> integer mapping, built from sorted category names."""
+    return {c: i for i, c in enumerate(sorted(df["category"].astype(str).unique()))}
 
-def build_features(df, for_training=True):
+
+def build_features(df, for_training=True, cat_map=None):
     """
     Add rolling, seasonal and recency features per product.
 
     for_training=True also adds the label (mean daily demand over the next
     LABEL_HORIZON days) and drops rows where it cannot be computed.
+
+    cat_map: category -> code mapping. Training builds it from the data; serving
+    passes the one stored in the model artefact so codes match. Unseen
+    categories map to -1. The mapping used is left in df.attrs["category_map"].
     """
     df = df.sort_values(["series", "date"]).copy()
     g = df.groupby("series")["units_sold"]
@@ -154,7 +162,9 @@ def build_features(df, for_training=True):
     else:
         df["days_since_restock"] = (df.groupby("series").cumcount() % 30).astype(int)
 
-    df["category_code"] = df["category"].astype("category").cat.codes
+    if cat_map is None:
+        cat_map = category_mapping(df)
+    df["category_code"] = df["category"].astype(str).map(cat_map).fillna(-1).astype(int)
 
     if for_training:
         df["label"] = (df.groupby("series")["units_sold"]
@@ -168,6 +178,7 @@ def build_features(df, for_training=True):
     df["trend_7_30"] = df["trend_7_30"].fillna(1.0)
     df["roll_std_7"] = df["roll_std_7"].fillna(0.0)
     df["roll_std_30"] = df["roll_std_30"].fillna(0.0)
+    df.attrs["category_map"] = cat_map
     return df
 
 

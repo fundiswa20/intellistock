@@ -1,0 +1,15 @@
+IntelliStock - training/serving parity check
+================================================================
+Run at      : 2026-09-28 17:39
+Dataset     : sales_data.csv
+Model       : v1.0-base
+Method      : 194 random rows (seed 42, >= 30 days prior history).
+              Each row's prediction from the training feature frame is compared
+              with the prediction from app.serving_features() given only the
+              60 days of sales before that row, as the API would send them.
+
+Max  |difference| : 0.000000 units/day
+Mean |difference| : 0.000000 units/day
+Identical rows    : 194 of 194
+
+Result: PASS - serving reproduces training features exactly

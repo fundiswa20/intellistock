@@ -150,6 +150,7 @@ def main():
     artefact = {
         "model": model,
         "feature_columns": FEATURE_COLUMNS,
+        "category_map": df.attrs.get("category_map", {}),
         "version": args.version,
         "trained_at": datetime.now().isoformat(timespec="seconds"),
         "metrics": {

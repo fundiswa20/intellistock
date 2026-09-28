@@ -26,8 +26,8 @@ services:
     environment:
       MODEL_DIR: /app/models
 
-  # api:      added Thu 24 Sep
-  # client:   added Sat 26 Sep
+  # api:      ASP.NET Core 8 - not built yet
+  # client:   Angular 17 - not built yet
 
 volumes:
   db-data:

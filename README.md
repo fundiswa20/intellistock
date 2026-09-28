@@ -12,21 +12,23 @@ transaction history predicts when each product will run out and how much to reor
 
 ```
 intellistock/
-├── model-service/        Python — the trained demand-forecasting model
+├── model-service/        Python — ReorderPredictionService, the demand-forecasting model
 │   ├── src/
 │   │   ├── inspect_dataset.py   check a CSV is usable for training
 │   │   ├── make_synthetic.py    generate stand-in data with the same shape
-│   │   ├── features.py          feature engineering          (Mon 21)
-│   │   ├── train.py             training + artefact export    (Mon 21)
-│   │   └── evaluate.py          MAPE vs baseline, latency     (Mon 21–Tue 22)
+│   │   ├── eda.py               exploratory analysis of the dataset
+│   │   ├── features.py          feature engineering, shared by training and serving
+│   │   ├── train.py             training, evaluation vs baseline, artefact export
+│   │   ├── check_parity.py      proves serving builds the same features as training
+│   │   └── measure_latency.py   times 100 POST /predict requests
 │   ├── data/             datasets (git-ignored)
 │   ├── models/           trained artefacts (git-ignored)
-│   └── app.py            FastAPI service exposing POST /predict   (Tue 22)
-├── api/                  ASP.NET Core 8 Web API                   (Thu 24)
-├── client/               Angular 17 client                        (Sat 26)
-├── db/init/              MySQL schema and seed data               (Wed 23)
+│   └── app.py            FastAPI service: POST /predict, GET /health, GET /models/{id}
+├── api/                  ASP.NET Core 8 Web API
+├── client/               Angular 17 client
+├── db/init/              MySQL schema and seed data
 ├── evidence/             test output, screenshots, metrics for Assignment 3
-├── docs/                 diagrams and written documentation
+├── docs/                 BUILD-JOURNAL.md, diagrams and written documentation
 └── docker-compose.yml    runs the whole system locally
 ```
 
@@ -60,8 +62,8 @@ docker compose up --build
 | Service | URL |
 |---|---|
 | Model service | http://localhost:8000/docs |
-| API | http://localhost:5000 (from 24 Sep) |
-| Client | http://localhost:4200 (from 26 Sep) |
+| API | http://localhost:5000 (not built yet) |
+| Client | http://localhost:4200 (not built yet) |
 | MySQL | localhost:3306 |
 
 ## Dataset
@@ -76,22 +78,35 @@ the API can all be developed and tested without waiting on the download.
 
 ## Build schedule
 
-| Date | Deliverable |
-|---|---|
-| Sun 21 Sep | Repository scaffold, dataset inspection, synthetic data |
-| Mon 22 Sep | Feature engineering, model training, evaluation against baseline |
-| Tue 23 Sep | Model wrapped in FastAPI, containerised, latency measured |
-| Wed 24 Sep | MySQL schema, migrations, seeded transactions |
-| Thu 25 Sep | API — auth, stock items, movements, alerts |
-| Fri 26 Sep | API — reorder prediction endpoint, unit and integration tests |
-| Sat 27 Sep | Angular client — login, stock list, item detail, alerts |
-| Sun 28 Sep | Full system run, capture all evidence |
-| Mon 29 Sep | Build freeze. Diagrams. |
-| Tue 30 Sep | Write and compile Assignment 3 |
+| Planned | Deliverable | Status |
+|---|---|---|
+| Sun 20 Sep | Repository scaffold, dataset inspection, synthetic data | Done Sun 20 |
+| Mon 21 Sep | Feature engineering, model training, evaluation against baseline | Done Mon 21 |
+| Tue 22 Sep | Model wrapped in FastAPI, containerised, latency measured | Done Mon 28 |
+| Wed 23 Sep | MySQL schema, migrations, seeded transactions | Not started |
+| Thu 24 Sep | API — auth, stock items, movements, alerts | Not started |
+| Fri 25 Sep | API — reorder prediction endpoint, unit and integration tests | Not started |
+| Sat 26 Sep | Angular client — login, stock list, item detail, alerts | Not started |
+| Sun 27 Sep | Full system run, capture all evidence | Not started |
+| Mon 28 Sep | Build freeze. Diagrams. | — |
+| Tue 29 Sep | Write and compile Assignment 3 | — |
+
+Weekdays are for 2026. An earlier version of this table paired each weekday with the
+following day's date; the dates were corrected to match the weekdays, which is what the
+rest of the plan used.
 
 ## Scope note
 
-FR-01 to FR-05 and FR-08 are built. Supplier-side functionality (FR-06, FR-07) is
-seeded directly into the database rather than given its own interface, and the
-consolidated reorder plan (FR-09) is deferred. These are recorded as Partial or
-Not met in the Assignment 3 traceability matrix.
+In scope and built in full: FR-02 login, FR-03 stock item CRUD, FR-04 stock movements
+with an immutable transaction log, FR-05 low-stock alerts, FR-08 reorder prediction.
+
+Partial:
+- FR-01 registration — users are seeded; there is no registration UI.
+- FR-06, FR-07 — supplier data is seeded directly into the database; there is no
+  supplier interface.
+
+Not met:
+- FR-09 — consolidated reorder plan, deferred.
+
+These are recorded the same way in the Assignment 3 traceability matrix. See
+`docs/BUILD-JOURNAL.md` for current status.
