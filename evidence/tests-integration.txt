@@ -1,0 +1,125 @@
+IntelliStock API - Integration tests
+================================================================
+Run at   : 2026-09-28 19:15
+Command  : dotnet test --filter Category=Integration --logger "console;verbosity=normal"
+Commit   : 7c3a9f8 + working tree
+Database : real MySQL 8.0.45 (docker compose 'db', port 3308), database intellistock_test rebuilt from db/init/*.sql each run; model service stubbed
+
+Test run for C:\Users\biztw\Desktop\fundiswa\intellistock\api\IntelliStock.Api.Tests\bin\Debug\net8.0\IntelliStock.Api.Tests.dll (.NETCoreApp,Version=v8.0)
+VSTest version 17.14.1 (x64)
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v2.5.3.1+6b60a9e56a (64-bit .NET 8.0.19)
+[xUnit.net 00:00:00.24]   Discovering: IntelliStock.Api.Tests
+[xUnit.net 00:00:00.41]   Discovered:  IntelliStock.Api.Tests
+[xUnit.net 00:00:00.42]   Starting:    IntelliStock.Api.Tests
+  Passed IntelliStock.Api.Tests.Integration.AuthTests.A_supplier_can_log_in_but_cannot_use_the_stock_endpoints [3 s]
+  Passed IntelliStock.Api.Tests.Integration.AuthTests.Wrong_password_and_unknown_email_get_the_same_401(email: "nobody@intellistock.test", password: "any-password") [174 ms]
+  Passed IntelliStock.Api.Tests.Integration.AuthTests.Wrong_password_and_unknown_email_get_the_same_401(email: "nomvula@intellistock.test", password: "wrong-password") [219 ms]
+  Passed IntelliStock.Api.Tests.Integration.AuthTests.A_forged_token_is_rejected [30 ms]
+  Passed IntelliStock.Api.Tests.Integration.AuthTests.Stock_endpoints_require_a_token [5 ms]
+  Passed IntelliStock.Api.Tests.Integration.AuthTests.Owner_logs_in_with_seeded_credentials_and_gets_a_token [184 ms]
+  Passed IntelliStock.Api.Tests.Integration.MovementAndAlertTests.Invalid_movements_are_rejected(type: "Sale", quantity: 0) [903 ms]
+  Passed IntelliStock.Api.Tests.Integration.MovementAndAlertTests.Invalid_movements_are_rejected(type: "Refund", quantity: 2) [304 ms]
+  Passed IntelliStock.Api.Tests.Integration.MovementAndAlertTests.Invalid_movements_are_rejected(type: "Restock", quantity: -3) [216 ms]
+  Passed IntelliStock.Api.Tests.Integration.MovementAndAlertTests.The_database_itself_refuses_to_change_a_recorded_movement [43 ms]
+  Passed IntelliStock.Api.Tests.Integration.MovementAndAlertTests.Restock_and_adjustment_are_recorded_and_the_log_reads_newest_first [442 ms]
+  Passed IntelliStock.Api.Tests.Integration.MovementAndAlertTests.There_is_no_endpoint_to_edit_or_delete_a_movement [236 ms]
+  Passed IntelliStock.Api.Tests.Integration.MovementAndAlertTests.A_sale_that_reaches_the_reorder_level_raises_one_alert_and_a_restock_resolves_it [565 ms]
+  Passed IntelliStock.Api.Tests.Integration.MovementAndAlertTests.Raising_the_reorder_level_above_current_stock_raises_an_alert [310 ms]
+  Passed IntelliStock.Api.Tests.Integration.MovementAndAlertTests.Owners_only_see_alerts_for_their_own_stock [203 ms]
+  Passed IntelliStock.Api.Tests.Integration.MovementAndAlertTests.A_sale_reduces_stock_and_is_written_to_the_log_with_the_running_balance [267 ms]
+  Passed IntelliStock.Api.Tests.Integration.MovementAndAlertTests.Selling_more_than_is_on_hand_is_refused_and_nothing_is_written [225 ms]
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[100]
+      Start processing HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[100]
+      Sending HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[101]
+      Received HTTP response headers after 15.7624ms - 200
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[101]
+      End processing HTTP request after 42.1326ms - 200
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[100]
+      Start processing HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[100]
+      Sending HTTP request POST http://localhost:8000/predict
+warn: IntelliStock.Api.Controllers.StockController[0]
+      Model service unavailable for item 3
+      System.Net.Http.HttpRequestException: connection refused
+         at IntelliStock.Api.Tests.Integration.PredictionTests.<>c.<Model_unreachable_falls_back_rather_than_failing_the_owner>b__11_0(JsonElement _) in C:\Users\biztw\Desktop\fundiswa\intellistock\api\IntelliStock.Api.Tests\Integration\PredictionTests.cs:line 105
+         at IntelliStock.Api.Tests.Integration.StubModelService.SendAsync(HttpRequestMessage request, CancellationToken ct) in C:\Users\biztw\Desktop\fundiswa\intellistock\api\IntelliStock.Api.Tests\Integration\ApiFactory.cs:line 134
+         at Microsoft.Extensions.Http.Logging.LoggingHttpMessageHandler.<SendCoreAsync>g__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+         at Microsoft.Extensions.Http.Logging.LoggingScopeHttpMessageHandler.<SendCoreAsync>g__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+         at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+         at IntelliStock.Api.Controllers.StockController.CallModel(StockItem item, Double[] series, Int32 daysSinceRestock, DateOnly asOf) in C:\Users\biztw\Desktop\fundiswa\intellistock\api\IntelliStock.Api\Controllers\StockController.cs:line 266
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[100]
+      Start processing HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[100]
+      Sending HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[101]
+      Received HTTP response headers after 0.3917ms - 200
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[101]
+      End processing HTTP request after 0.538ms - 200
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[100]
+      Start processing HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[100]
+      Sending HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[101]
+      Received HTTP response headers after 2.3136ms - 503
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[101]
+      End processing HTTP request after 2.473ms - 503
+warn: IntelliStock.Api.Controllers.StockController[0]
+      Model service returned 503 for item 3
+  Passed IntelliStock.Api.Tests.Integration.PredictionTests.Low_confidence_falls_back_to_the_30_day_average_and_says_so [541 ms]
+  Passed IntelliStock.Api.Tests.Integration.PredictionTests.Model_unreachable_falls_back_rather_than_failing_the_owner [272 ms]
+  Passed IntelliStock.Api.Tests.Integration.PredictionTests.Every_prediction_is_stored_and_the_latest_can_be_read_back [478 ms]
+  Passed IntelliStock.Api.Tests.Integration.PredictionTests.Model_errors_fall_back_rather_than_failing_the_owner(status: ServiceUnavailable) [229 ms]
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[100]
+      Start processing HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[100]
+      Sending HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[101]
+      Received HTTP response headers after 0.1725ms - 500
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[101]
+      End processing HTTP request after 0.2941ms - 500
+warn: IntelliStock.Api.Controllers.StockController[0]
+      Model service returned 500 for item 3
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[100]
+      Start processing HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[100]
+      Sending HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[101]
+      Received HTTP response headers after 1.4096ms - 422
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[101]
+      End processing HTTP request after 1.5571ms - 422
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[100]
+      Start processing HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[100]
+      Sending HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[101]
+      Received HTTP response headers after 0.6658ms - 200
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[101]
+      End processing HTTP request after 0.8478ms - 200
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[100]
+      Start processing HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[100]
+      Sending HTTP request POST http://localhost:8000/predict
+info: System.Net.Http.HttpClient.ReorderPredictionService.ClientHandler[101]
+      Received HTTP response headers after 0.6973ms - 200
+info: System.Net.Http.HttpClient.ReorderPredictionService.LogicalHandler[101]
+      End processing HTTP request after 0.8994ms - 200
+  Passed IntelliStock.Api.Tests.Integration.PredictionTests.Model_errors_fall_back_rather_than_failing_the_owner(status: InternalServerError) [202 ms]
+  Passed IntelliStock.Api.Tests.Integration.PredictionTests.Model_422_insufficient_history_falls_back_for_a_new_item [248 ms]
+  Passed IntelliStock.Api.Tests.Integration.PredictionTests.A_confident_prediction_is_used_and_stock_out_days_are_derived_from_live_stock [260 ms]
+  Passed IntelliStock.Api.Tests.Integration.PredictionTests.Sends_the_model_60_days_of_daily_sales_oldest_first_from_the_transaction_log [281 ms]
+  Passed IntelliStock.Api.Tests.Integration.StockItemTests.Owner_sees_only_their_own_seeded_stock [256 ms]
+  Passed IntelliStock.Api.Tests.Integration.StockItemTests.Updating_an_item_changes_its_details_but_never_its_quantity [355 ms]
+[xUnit.net 00:00:15.11]   Finished:    IntelliStock.Api.Tests
+  Passed IntelliStock.Api.Tests.Integration.StockItemTests.Another_owners_item_answers_404_not_403 [251 ms]
+  Passed IntelliStock.Api.Tests.Integration.StockItemTests.Deleting_an_item_hides_it_but_keeps_its_history [329 ms]
+  Passed IntelliStock.Api.Tests.Integration.StockItemTests.A_category_the_model_does_not_know_is_rejected [196 ms]
+  Passed IntelliStock.Api.Tests.Integration.StockItemTests.Creating_an_item_records_its_opening_stock_in_the_transaction_log [216 ms]
+  Passed IntelliStock.Api.Tests.Integration.StockItemTests.Invalid_input_is_rejected_with_a_validation_problem [222 ms]
+Test Run Successful.
+Total tests: 32
+     Passed: 32
+ Total time: 16.4440 Seconds

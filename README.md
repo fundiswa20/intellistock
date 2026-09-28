@@ -61,6 +61,10 @@ python src/inspect_dataset.py data/<downloaded-file>.csv
 cd ..
 docker compose up --build
 
+# API tests (needs the db container running)
+cd api && dotnet test && cd ..
+python api/smoke_test.py          # end-to-end, needs the whole stack
+
 # optional: regenerate seed data, then verify the database
 python db/seed/generate_seed.py
 bash db/verify.sh
@@ -69,7 +73,7 @@ bash db/verify.sh
 | Service | URL |
 |---|---|
 | Model service | http://localhost:8000/docs |
-| API | http://localhost:5000 (not built yet) |
+| API | http://localhost:5000 (Swagger UI at /swagger) |
 | Client | http://localhost:4200 (not built yet) |
 | MySQL | localhost:3308 (container port 3306; set DB_PORT to change) |
 
@@ -90,10 +94,10 @@ the API can all be developed and tested without waiting on the download.
 | Sun 20 Sep | Repository scaffold, dataset inspection, synthetic data | Done Sun 20 |
 | Mon 21 Sep | Feature engineering, model training, evaluation against baseline | Done Mon 21 |
 | Tue 22 Sep | Model wrapped in FastAPI, containerised, latency measured | Done Mon 28 |
-| Wed 23 Sep | MySQL schema, migrations, seeded transactions | Not started |
-| Thu 24 Sep | API — auth, stock items, movements, alerts | Not started |
-| Fri 25 Sep | API — reorder prediction endpoint, unit and integration tests | Not started |
-| Sat 26 Sep | Angular client — login, stock list, item detail, alerts | Not started |
+| Wed 23 Sep | MySQL schema, migrations, seeded transactions | Done Mon 28 |
+| Thu 24 Sep | API — auth, stock items, movements, alerts | Done Mon 28 |
+| Fri 25 Sep | API — reorder prediction endpoint, unit and integration tests | Done Mon 28 |
+| Sat 26 Sep | Angular client — login, stock list, item detail, alerts | Minimal two-screen client Tue 29; full client for Assignment 4 |
 | Sun 27 Sep | Full system run, capture all evidence | Not started |
 | Mon 28 Sep | Build freeze. Diagrams. | — |
 | Tue 29 Sep | Write and compile Assignment 3 | — |

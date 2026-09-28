@@ -1,0 +1,280 @@
+IntelliStock - API end-to-end check (real MySQL, real model service)
+======================================================================
+Run at : 2026-09-28 19:27
+Target : http://localhost:5000
+
+[PASS] GET /health - API up, database connected
+       HTTP 200 (expected 200)
+       {
+         "status": "ok",
+         "database": "connected"
+       }
+
+[PASS] FR-02 POST /api/auth/login - seeded owner
+       HTTP 200 (expected 200)
+       {
+         "token": "eyJhbGciOiJIUzI1NiIsInR5... (truncated)",
+         "expiresAt": "2026-09-29T01:27:43.6832776Z",
+         "user": {
+           "id": 1,
+           "fullName": "Nomvula Dlamini",
+           "email": "nomvula@intellistock.test",
+           "role": "BusinessOwner",
+           "businessName": "Nomvula's Spaza"
+         }
+       }
+
+[PASS] FR-02 POST /api/auth/login - wrong password
+       HTTP 401 (expected 401)
+       {
+         "title": "Email or password is incorrect.",
+         "status": 401
+       }
+
+[PASS] FR-02 GET /api/stock without a token
+       HTTP 401 (expected 401)
+       (no body)
+
+[PASS] FR-03 GET /api/stock - Nomvula's stock list
+       HTTP 200 (expected 200)
+       {
+         "count": 22,
+         "low": 8,
+         "items": [
+           "  1  Albany Brown Bread 700g          on hand   0  reorder at  6  LOW",
+           "  8  Clover Long Life Milk 1L         on hand  11  reorder at  8",
+           " 10  Coca-Cola 2L                     on hand  24  reorder at  8",
+           " 22  Fatti's & Moni's Spaghetti 500g  on hand   6  reorder at  3",
+           " 19  Household Candles 6-pack         on hand  11  reorder at  4",
+           " 21  Inkomazi Amasi 2L                on hand   3  reorder at  4  LOW",
+           "  3  Iwisa Super Maize Meal 5kg       on hand   5  reorder at  4",
+           " 14  Joko Tea 100 bags                on hand   5  reorder at  2",
+           " 15  Knorrox Beef Stock Cubes 24      on hand  13  reorder at  3",
+           " 13  Koo Baked Beans 410g             on hand   3  reorder at  4  LOW",
+           "  9  Large Eggs 6-pack                on hand   0  reorder at  6  LOW",
+           " 18  Lion Matches 10-pack             on hand   6  reorder at  3",
+           " 12  Lucky Star Pilchards 400g        on hand  13  reorder at  5",
+           " 20  Paraffin 1L                      on hand  18  reorder at  4",
+           " 16  Royco Soup Powder 50g            on hand  13  reorder at  8",
+           "  2  Sasko White Bread 700g           on hand   0  reorder at  5  LOW",
+           "  5  Selati White Sugar 2kg           on hand  10  reorder at  4",
+           " 11  Simba Chips 36g                  on hand   0  reorder at 20  LOW",
+           "  7  Sunfoil Cooking Oil 750ml        on hand   8  reorder at  4",
+           " 17  Sunlight Bar Soap 175g           on hand   0  reorder at  4  LOW",
+           "  6  Tastic Rice 2kg                  on hand  11  reorder at  3",
+           "  4  White Star Maize Meal 2.5kg      on hand   4  reorder at  6  LOW"
+         ]
+       }
+
+[PASS] FR-03 GET /api/stock/3
+       HTTP 200 (expected 200)
+       {
+         "stockItemId": 3,
+         "name": "Iwisa Super Maize Meal 5kg",
+         "category": "Groceries",
+         "unit": "bag",
+         "quantityOnHand": 5,
+         "reorderLevel": 4,
+         "unitCost": 66.0,
+         "sellingPrice": 79.99,
+         "isLow": false,
+         "createdAt": "2026-05-31T06:00:00"
+       }
+
+[PASS] FR-03 GET /api/stock/101 - another owner's item is not found
+       HTTP 404 (expected 404)
+       {
+         "type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
+         "title": "Not Found",
+         "status": 404,
+         "traceId": "00-99d237884927cac54f264cbed18e1c7e-88f1ae8e76b14a71-00"
+       }
+
+[PASS] FR-04 GET /api/stock/3/movements - transaction log, newest first
+       HTTP 200 (expected 200)
+       [
+         {
+           "transactionId": 5551,
+           "type": "Sale",
+           "quantityChange": -3,
+           "quantityAfter": 5,
+           "occurredAt": "2026-09-27T19:30:00",
+           "note": null
+         },
+         {
+           "transactionId": 5532,
+           "type": "Sale",
+           "quantityChange": -1,
+           "quantityAfter": 8,
+           "occurredAt": "2026-09-27T13:00:00",
+           "note": null
+         },
+         {
+           "transactionId": 5506,
+           "type": "Sale",
+           "quantityChange": -2,
+           "quantityAfter": 9,
+           "occurredAt": "2026-09-26T19:30:00",
+           "note": null
+         },
+         {
+           "transactionId": 5484,
+           "type": "Sale",
+           "quantityChange": -1,
+           "quantityAfter": 11,
+           "occurredAt": "2026-09-26T13:00:00",
+           "note": null
+         },
+         {
+           "transactionId": 5454,
+           "type": "Sale",
+           "quantityChange": -3,
+           "quantityAfter": 12,
+           "occurredAt": "2026-09-25T19:30:00",
+           "note": null
+         },
+         {
+           "transactionId": 5430,
+           "type": "Sale",
+           "quantityChange": -2,
+           "quantityAfter": 15,
+           "occurredAt": "2026-09-25T13:00:00",
+           "note": null
+         },
+         {
+           "transactionId": 5403,
+           "type": "Sale",
+           "quantityChange": -2,
+           "quantityAfter": 17,
+           "occurredAt": "2026-09-24T19:30:00",
+           "note": null
+         },
+         {
+           "transactionId": 5383,
+           "type": "Sale",
+           "quantityChange": -1,
+           "quantityAfter": 19,
+           "occurredAt": "2026-09-24T13:00:00",
+           "note": null
+         }
+       ]
+
+[PASS] FR-04 POST /api/stock/3/movements - overselling refused, nothing written
+       HTTP 409 (expected 409)
+       {
+         "title": "Cannot sell 9999 - only 5 in stock.",
+         "status": 409
+       }
+
+[PASS] FR-05 GET /api/stock/alerts - open low-stock alerts
+       HTTP 200 (expected 200)
+       {
+         "count": 8,
+         "alerts": [
+           "Inkomazi Amasi 2L is down to 3 bottles (reorder level 4)",
+           "White Star Maize Meal 2.5kg is down to 6 bags (reorder level 6)",
+           "Albany Brown Bread 700g is down to 5 loaves (reorder level 6)",
+           "Sasko White Bread 700g is down to 0 loaves (reorder level 5)",
+           "Simba Chips 36g is down to 18 packets (reorder level 20)",
+           "Sunlight Bar Soap 175g is down to 2 bars (reorder level 4)",
+           "Koo Baked Beans 410g is down to 4 tins (reorder level 4)",
+           "Large Eggs 6-pack is down to 5 boxes (reorder level 6)"
+         ]
+       }
+
+[PASS] FR-08 POST /api/stock/1/prediction - fast mover, bread
+       HTTP 200 (expected 200)
+       {
+         "reorderPredictionId": 3,
+         "stockItemId": 1,
+         "stockItemName": "Albany Brown Bread 700g",
+         "quantityOnHand": 0,
+         "reorderLevel": 6,
+         "predictedDailyDemand": 22.1,
+         "confidence": 0.704,
+         "daysUntilStockOut": 0,
+         "recommendedQuantity": 161,
+         "modelVersion": "v1.1-relative",
+         "usedFallback": false,
+         "fallbackReason": null,
+         "historyDays": 60,
+         "createdAt": "2026-09-28T19:27:44.836681"
+       }
+
+[PASS] FR-08 POST /api/stock/11/prediction - fast mover, chips
+       HTTP 200 (expected 200)
+       {
+         "reorderPredictionId": 4,
+         "stockItemId": 11,
+         "stockItemName": "Simba Chips 36g",
+         "quantityOnHand": 0,
+         "reorderLevel": 20,
+         "predictedDailyDemand": 19.486,
+         "confidence": 0.779,
+         "daysUntilStockOut": 0,
+         "recommendedQuantity": 157,
+         "modelVersion": "v1.1-relative",
+         "usedFallback": false,
+         "fallbackReason": null,
+         "historyDays": 60,
+         "createdAt": "2026-09-28T19:27:45.2094553"
+       }
+
+[PASS] FR-08 POST /api/stock/3/prediction - slow mover, maize meal
+       HTTP 200 (expected 200)
+       {
+         "reorderPredictionId": 5,
+         "stockItemId": 3,
+         "stockItemName": "Iwisa Super Maize Meal 5kg",
+         "quantityOnHand": 5,
+         "reorderLevel": 4,
+         "predictedDailyDemand": 2.867,
+         "confidence": 0.578,
+         "daysUntilStockOut": 1.7,
+         "recommendedQuantity": 20,
+         "modelVersion": "v1.1-relative",
+         "usedFallback": true,
+         "fallbackReason": "lowConfidence",
+         "historyDays": 60,
+         "createdAt": "2026-09-28T19:27:45.3767723"
+       }
+
+[PASS] FR-08 POST /api/stock/19/prediction - erratic, candles after load shedding
+       HTTP 200 (expected 200)
+       {
+         "reorderPredictionId": 6,
+         "stockItemId": 19,
+         "stockItemName": "Household Candles 6-pack",
+         "quantityOnHand": 11,
+         "reorderLevel": 4,
+         "predictedDailyDemand": 1.667,
+         "confidence": 0.442,
+         "daysUntilStockOut": 6.6,
+         "recommendedQuantity": 5,
+         "modelVersion": "v1.1-relative",
+         "usedFallback": true,
+         "fallbackReason": "lowConfidence",
+         "historyDays": 60,
+         "createdAt": "2026-09-28T19:27:45.5111026"
+       }
+
+[PASS] FR-08 POST /api/stock/22/prediction - new item, 13 days of history
+       HTTP 200 (expected 200)
+       {
+         "reorderPredictionId": 7,
+         "stockItemId": 22,
+         "stockItemName": "Fatti's & Moni's Spaghetti 500g",
+         "quantityOnHand": 6,
+         "reorderLevel": 3,
+         "predictedDailyDemand": 1.846,
+         "confidence": null,
+         "daysUntilStockOut": 3.2,
+         "recommendedQuantity": 10,
+         "modelVersion": null,
+         "usedFallback": true,
+         "fallbackReason": "insufficientHistory",
+         "historyDays": 13,
+         "createdAt": "2026-09-28T19:27:45.573427"
+       }
+
+15 of 15 checks passed

@@ -15,20 +15,20 @@ _Last updated: Mon 28 Sep 2026._
 | Model training + evaluation | — | **Done.** Default model `v1.1-relative`: MAPE 10.53% vs 22.18% baseline, works at any sales volume (D16). `v1.0-base` (10.51%) kept. |
 | Model service | ReorderPredictionService | **Done.** `POST /predict`, `GET /health`, `GET /models/{id}`, running in Docker Compose. p95 latency 69.9 ms. |
 | MySQL schema + seed | all 8 UML classes | **Done.** 8 tables, FR-04 immutability enforced by triggers, 120 days of spaza-shop history (5,570 transactions). Verified: `evidence/db-verification.txt`. |
-| API | StockController, InventoryRepository | Not started. |
-| Client | InventoryDashboard | Not started. |
+| API | StockController, InventoryRepository (+ AuthController, see O5) | **Done.** ASP.NET Core 8, EF Core 8 + Pomelo, JWT. 37 unit + 32 integration tests pass. Runs in Docker Compose on port 5000. |
+| Client | InventoryDashboard | Not started. Minimal two-screen client planned for Tue 29 (screenshots and user guide); the full client is for Assignment 4. |
 
 **Requirements**
 
 | ID | Requirement | Status |
 |---|---|---|
 | FR-01 | Registration | Partial — users seeded, no registration UI |
-| FR-02 | Login | To build |
-| FR-03 | Stock item CRUD | To build |
-| FR-04 | Stock movement, immutable transaction log | To build |
-| FR-05 | Low-stock alerts | To build |
+| FR-02 | Login | API done and tested; UI to build |
+| FR-03 | Stock item CRUD | API done and tested; UI to build |
+| FR-04 | Stock movement, immutable transaction log | API done and tested, immutability enforced by the database; UI to build |
+| FR-05 | Low-stock alerts | API done and tested; UI to build |
 | FR-06, FR-07 | Supplier functionality | Partial — supplier data seeded, no supplier interface |
-| FR-08 | Reorder prediction | Model service done; API call and UI to build |
+| FR-08 | Reorder prediction | Model service and API done and tested end to end; UI to build |
 | FR-09 | Consolidated reorder plan | Not met — deferred |
 | ETR-01 | MAPE ≤ 20% and ≥ 10% better than baseline | Met — v1.1-relative 10.53%, 52.5% better than baseline, same test period as v1.0 |
 | ETR-03 | 422 on insufficient history; low-confidence flag | Met in the model service; the fallback itself is the API's job |
@@ -46,6 +46,17 @@ _Last updated: Mon 28 Sep 2026._
   and summing 7 days cuts the Poisson noise by √7 while keeping real volatility such as the
   candle spikes. Until then, the API's fallback applies to those items (ETR-03 working as
   designed, just more often than it should).
+
+- **O5 — AuthController is not in the UML component list.** FR-02 needs a login
+  endpoint, and putting it in StockController would be wrong (StockController is for
+  signed-in owners only). The implementation adds `AuthController` (`POST /api/auth/login`).
+  **To decide**: add it to the component diagram and record it as an approved change for
+  Q1.2 (recommended), or keep the diagram and record it as a deviation.
+- **O6 — the meaning of "threshold fallback" (ETR-03).** It is implemented as: when the model
+  is not confident, has too little history, or is unreachable, the forecast is replaced by
+  the item's 30-day average demand (the baseline from D6), and the reason is stored. The
+  item's `ReorderLevel` threshold keeps driving alerts either way (D25). **To check** against
+  the wording of ETR-03 in the submitted requirements.
 
 Resolved on Mon 28:
 
@@ -269,6 +280,57 @@ stock-out, and one item added on 14 Sep so it has too little history. Everything
 Groceries (O2). Real brand names are used for product names only; the shops, owners and
 suppliers are fictional, with `.test` email domains.
 
+**D24 — API shape: two controllers, EF Core used directly.** _(Mon 28)_
+`AuthController` handles `POST /api/auth/login` (FR-02). `StockController`
+(`[Authorize(Roles = "BusinessOwner")]`) handles everything else under `/api/stock`:
+list/get/create/update/delete (FR-03), `POST` and `GET /{id}/movements` (FR-04),
+`GET /alerts` (FR-05), and `POST` / `GET /{id}/prediction` (FR-08). Both use the
+`InventoryRepository` DbContext directly (D15). The movement and reorder rules are pure static
+functions (`Domain/StockRules.cs`, `Domain/ReorderCalculator.cs`). That isn't a layer: it's
+what makes them unit-testable without a database. Swagger UI is at `/swagger`.
+
+**D25 — ETR-03 fallback: the 30-day average, with the reason recorded.** _(Mon 28)_
+The model's forecast is used only if the model service answered 200 and `lowConfidence` is
+false. Otherwise the forecast is the item's average daily sales over the last 30 days (the
+same baseline the model was evaluated against, D6), and `FallbackReason` is stored:
+`insufficientHistory` (the model's 422), `lowConfidence`, or `modelUnavailable` (error,
+timeout or unreachable). The owner always gets a recommendation. A model outage degrades it
+and never breaks the screen. See O6.
+
+**D26 — Reorder arithmetic.** _(Mon 28)_
+`daysUntilStockOut = quantityOnHand ÷ dailyDemand` (null if demand is 0), and
+`recommendedQuantity = ⌈7 × dailyDemand + ReorderLevel − quantityOnHand⌉`, never negative.
+That's a week's forecast demand (one wholesaler cycle, and the model's 7-day horizon) and still
+above the reorder level after it. Pack sizes are not rounded to, because they live in
+SupplierListing (FR-06/07, Partial).
+**Known limitation, for Assignment 4:** the 7-day cover is the same for every item. For bread,
+delivered daily and perishable, the end-to-end run recommends 161 loaves, which is a week's
+demand. A per-item cover period (1 day for bakery items) is the fix.
+
+**D27 — The model's input is built from the transaction log.** _(Mon 28)_
+`dailySales` = units sold per day for up to 60 days ending yesterday, oldest first, with 0 for days
+with no sale. It starts the day after the item was created, because the creation day is partial. Today is
+excluded because it is not over. `daysSinceRestock` comes from the last `Restock` row (D12), and
+`asOfDate` is always sent (D13). The integration test checks that the series sums to the Sale
+rows in the database.
+
+**D28 — Ownership: another owner's stock answers 404.** _(Mon 28)_
+Every query is filtered to the signed-in owner. Asking for another owner's item returns 404,
+not 403, so the API doesn't confirm the item exists. Suppliers can log in (FR-02) but get 403 on
+`/api/stock`, because there's no supplier interface yet.
+
+**D29 — Concurrency and time.** _(Mon 28)_
+Recording a movement locks the stock item row (`SELECT … FOR UPDATE`) inside a database
+transaction, so two sales recorded at the same moment can't both read the same balance.
+Times are South African wall-clock time, UTC+2 fixed (SA has no daylight saving), matching the
+seed data.
+
+**D30 — Integration tests use a real MySQL database, not an in-memory fake.** _(Mon 28)_
+`intellistock_test` is rebuilt from `db/init/01-schema.sql` and `02-seed.sql` at the start of
+each run. So the triggers, CHECK constraints and unique keys under test are the real ones, and an
+EF in-memory provider would not have them. Only the model service is replaced, by a stub, so each
+ETR-03 path can be forced. The real model is exercised by `api/smoke_test.py`.
+
 ---
 
 ## 3. File guide
@@ -291,7 +353,13 @@ suppliers are fictional, with `.test` email domains.
 | `db/init/02-seed.sql` | Seed data. Generated; do not edit by hand. Test logins in its header. |
 | `db/seed/generate_seed.py` | Simulates the spaza-shop history and writes `02-seed.sql`. |
 | `db/verify.sql`, `db/verify.sh` | Consistency checks and constraint tests → `evidence/db-verification.txt`, `evidence/schema.sql`. |
-| `docker-compose.yml` | MySQL 8 (host port 3308) and the model service; api and client to be added. |
+| `api/IntelliStock.Api/Controllers/` | `AuthController` (FR-02), `StockController` (FR-03/04/05/08). |
+| `api/IntelliStock.Api/Data/InventoryRepository.cs` | The EF Core DbContext, i.e. the UML InventoryRepository component. |
+| `api/IntelliStock.Api/Models/` | One class per UML class. |
+| `api/IntelliStock.Api/Domain/` | Pure rules: movements and alerts (`StockRules`), reorder arithmetic (`ReorderCalculator`), SA time (`Clock`). |
+| `api/IntelliStock.Api.Tests/` | `Unit/` (no database) and `Integration/` (real MySQL, stub model). |
+| `api/smoke_test.py` | End-to-end check against the running stack → `evidence/api-endpoints.txt`. |
+| `docker-compose.yml` | MySQL 8 (host port 3308), model service (8000), API (5000); client to be added. |
 | `evidence/` | Everything Assignment 3 cites. Checklist in `evidence/README.md`. |
 
 ---
@@ -339,6 +407,13 @@ MAPE 10.51% vs 22.18% baseline (`86de1ea`).
 - Ran every seeded item through the model service: good forecasts (bread 22.3 against a
   23.1/day average, chips 21.0 against 21.1), the new item → 422, but 10 of 22 flagged
   low-confidence. Recorded as O4.
+- Scope confirmed: Assignment 3 (Wed 30) grades documentation and evidence of what exists.
+  The prototype is graded in Assignment 4 (from 3 Oct). Tonight: finish the API and stop.
+- API (D24–D30). The test run found one bug in a test, which assumed item ids above 100
+  were the second owner's; the API was right. It also found a real bug: timestamps
+  serialised with a `Z` (UTC) although they are SA time. Both fixed. 37 unit and 32 integration
+  tests pass. Only the .NET 9 SDK is installed on this machine, and it builds the `net8.0`
+  target. The .NET 8 runtime is installed; the Docker image uses the official 8.0 SDK.
 - Fixed the README: schedule dates now match their 2026 weekdays, file tree matches the
   real files, scope note shows FR-01 and FR-06/07 as Partial.
 
@@ -373,5 +448,10 @@ MAPE 10.51% vs 22.18% baseline (`86de1ea`).
 - **Is the seed data real?** No, and say so. It is simulated (D23), from a fixed seed, with
   the behaviour of a real spaza shop built in: payday peaks, bakery deliveries, the missed
   Heritage Day trip. It is internally consistent by construction and verified by query.
+- **What happens if the model service is down?** D25. The owner still gets a
+  recommendation from the 30-day average, labelled as a fallback. The integration tests force
+  a 500, a 503 and a refused connection.
+- **Why test against real MySQL rather than an in-memory database?** D30.
+- **Why does another owner's item give 404 and not 403?** D28.
 - **Why are FR-06, FR-07 and FR-09 not fully met?** Scope was cut to protect the core
   prediction flow. They are recorded as Partial/Not met, not omitted.
