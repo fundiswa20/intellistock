@@ -20,9 +20,11 @@ intellistock/
 │   │   ├── features.py          feature engineering, shared by training and serving
 │   │   ├── train.py             training, evaluation vs baseline, artefact export
 │   │   ├── check_parity.py      proves serving builds the same features as training
+│   │   ├── check_scale.py       forecasts at 3–300 units/day, per model
+│   │   ├── smoke_test.py        every endpoint and error path
 │   │   └── measure_latency.py   times 100 POST /predict requests
 │   ├── data/             datasets (git-ignored)
-│   ├── models/           trained artefacts (git-ignored)
+│   ├── models/           trained artefacts (git-ignored): v1.1-relative (default), v1.0-base
 │   └── app.py            FastAPI service: POST /predict, GET /health, GET /models/{id}
 ├── api/                  ASP.NET Core 8 Web API
 ├── client/               Angular 17 client

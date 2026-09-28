@@ -20,7 +20,7 @@ warnings.filterwarnings("ignore")
 HERE = os.path.dirname(__file__)
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, ".."))
-from features import build_features, load_and_standardise  # noqa: E402
+from features import add_relative_features, build_features, load_and_standardise  # noqa: E402
 import app  # noqa: E402
 
 EVIDENCE_DIR = os.path.join(HERE, "..", "..", "evidence")
@@ -35,7 +35,7 @@ def main():
 
     art = joblib.load(os.path.join(app.MODEL_DIR, f"{args.model}.joblib"))
     raw = load_and_standardise(args.dataset)
-    train_path = build_features(raw, for_training=True)
+    train_path = add_relative_features(build_features(raw, for_training=True))
     sample = train_path.sample(args.rows, random_state=42)
 
     diffs = []
@@ -48,7 +48,7 @@ def main():
                                  daysSinceRestock=int(r["days_since_restock"]),
                                  asOfDate=r["date"].date())
         a = art["model"].predict(train_path.loc[[idx], art["feature_columns"]])[0]
-        b = art["model"].predict(app.serving_features(req, req.asOfDate, art))[0]
+        b = art["model"].predict(app.serving_features(req, req.asOfDate, art)[art["feature_columns"]])[0]
         diffs.append(abs(a - b))
 
     diffs = np.array(diffs)
@@ -71,7 +71,8 @@ def main():
     ]
     print("\n".join(lines))
     os.makedirs(EVIDENCE_DIR, exist_ok=True)
-    with open(os.path.join(EVIDENCE_DIR, "model-serving-parity.txt"), "w") as f:
+    with open(os.path.join(EVIDENCE_DIR, "model-serving-parity.txt" if args.model == "v1.0-base"
+                                     else f"model-serving-parity-{args.model}.txt"), "w") as f:
         f.write("\n".join(lines) + "\n")
 
 

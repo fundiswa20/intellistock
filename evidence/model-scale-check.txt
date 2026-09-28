@@ -1,0 +1,26 @@
+IntelliStock - forecast scale check
+================================================================
+Run at : 2026-09-28 18:18
+Target : http://localhost:8000/predict
+
+1. Flat history: the same units every day for 60 days, category Groceries,
+   daysSinceRestock 4, asOfDate 2026-09-28. The right answer is the flat level.
+
+  units/day |                v1.0-base |            v1.1-relative
+  ---------------------------------------------------------------
+          3 |     44.13 ( +1371%)      |      2.87 (    -4%)     
+         10 |     44.13 (  +341%)      |      9.57 (    -4%)     
+         30 |     45.90 (   +53%)      |     28.71 (    -4%)     
+         90 |     89.29 (    -1%)      |     86.13 (    -4%)     
+        300 |    148.36 (   -51%)      |    287.11 (    -4%)     
+
+2. Realistic low-volume history: 60 days of Poisson-distributed daily sales
+   (seed 42), as a spaza shop's slow and fast movers would look.
+
+   mean/day |                v1.0-base |            v1.1-relative
+  ---------------------------------------------------------------
+        3.0 |        44.13 conf 0.69   |         2.97 conf 0.69  
+       10.0 |        43.25 conf 0.76   |        10.64 conf 0.76  
+       29.7 |        45.82 conf 0.88   |        28.20 conf 0.88  
+
+  mean/day = mean of the last 30 days sent. conf = confidence heuristic (D11).

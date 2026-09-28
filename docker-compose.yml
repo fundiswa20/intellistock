@@ -25,6 +25,7 @@ services:
       - ./model-service/models:/app/models
     environment:
       MODEL_DIR: /app/models
+      DEFAULT_MODEL_ID: v1.1-relative   # v1.0-base stays available via modelId (see BUILD-JOURNAL D16)
 
   # api:      ASP.NET Core 8 - not built yet
   # client:   Angular 17 - not built yet

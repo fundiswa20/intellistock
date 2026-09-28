@@ -12,8 +12,8 @@ _Last updated: Mon 28 Sep 2026._
 
 | Component | UML name | State |
 |---|---|---|
-| Model training + evaluation | — | **Done.** MAPE 10.51% vs 22.18% baseline (see D1–D7). |
-| Model service | ReorderPredictionService | **Done.** `POST /predict`, `GET /health`, `GET /models/{id}`, running in Docker Compose. p95 latency 72.9 ms. |
+| Model training + evaluation | — | **Done.** Default model `v1.1-relative`: MAPE 10.53% vs 22.18% baseline, works at any sales volume (D16). `v1.0-base` (10.51%) kept. |
+| Model service | ReorderPredictionService | **Done.** `POST /predict`, `GET /health`, `GET /models/{id}`, running in Docker Compose. p95 latency 69.9 ms. |
 | MySQL schema + seed | — | Not started. |
 | API | StockController, InventoryRepository | Not started. |
 | Client | InventoryDashboard | Not started. |
@@ -30,32 +30,24 @@ _Last updated: Mon 28 Sep 2026._
 | FR-06, FR-07 | Supplier functionality | Partial — supplier data seeded, no supplier interface |
 | FR-08 | Reorder prediction | Model service done; API call and UI to build |
 | FR-09 | Consolidated reorder plan | Not met — deferred |
-| ETR-01 | MAPE ≤ 20% and ≥ 10% better than baseline | Met on the Kaggle test period — but see **O1** |
+| ETR-01 | MAPE ≤ 20% and ≥ 10% better than baseline | Met — v1.1-relative 10.53%, 52.5% better than baseline, same test period as v1.0 |
 | ETR-03 | 422 on insufficient history; low-confidence flag | Met in the model service; the fallback itself is the API's job |
 
 **Open issues**
 
-- **O1 — the model cannot predict spaza-shop volumes.** Found Mon 28 while smoke-testing.
-  Given flat sales histories, the model's output is bounded to about 44–148 units/day:
+None blocking. Resolved on Mon 28:
 
-  | Flat history (units/day) | 2 | 5 | 10 | 20 | 40 | 80 | 120 | 200 | 300 |
-  |---|---|---|---|---|---|---|---|---|---|
-  | Predicted | 44.1 | 44.1 | 44.1 | 44.1 | 54.0 | 83.2 | 113.7 | 148.4 | 148.4 |
-
-  Gradient-boosted trees cannot extrapolate beyond the target values seen in training, and
-  the Kaggle dataset's daily units sold have a median of 84 (IQR 58–114). A spaza shop
-  selling 5 loaves a day would be forecast at 44. The 10.51% MAPE is true for the test
-  period it was measured on and says nothing about low-volume items. **Needs a decision**
-  before seed data is written — options are in the session log for Mon 28.
+- **O1 — v1.0-base could not predict spaza-shop volumes.** Found while smoke-testing.
+  With flat sales histories, v1.0's output was bounded to about 44–148 units/day. Trees
+  cannot extrapolate beyond the targets seen in training, and the Kaggle data's median is
+  84 units/day. **Resolved by D16**: `v1.1-relative` predicts a ratio, and it is −4% at
+  every volume from 3 to 300 units/day.
 - **O2 — category vocabulary.** The model knows five categories: Clothing, Electronics,
-  Furniture, Groceries, Toys. Any other category string maps to code −1, which the model
-  never saw. Seeded stock items should use these names (almost all spaza stock is
-  Groceries), or accept −1 knowingly. Permutation importance of `category_code` is 0.017
-  against 1.41 for `roll_mean_7`, so the effect is small either way.
-- **O3 — InventoryRepository vs "controller calls EF Core directly".** The UML has an
-  InventoryRepository component; the build brief rules out a repository layer. Proposed
-  reconciliation: the EF Core `DbContext` class is named `InventoryRepository`. To confirm
-  before the API is built.
+  Furniture, Groceries, Toys. Any other string maps to code −1. **Resolved**: spaza stock
+  is seeded as Groceries.
+- **O3 — InventoryRepository vs "controller calls EF Core directly".** **Resolved**: the
+  EF Core `DbContext` class is named `InventoryRepository`, so the UML component exists by
+  name. There is no repository pattern layered on top (D15).
 
 ---
 
@@ -165,8 +157,61 @@ Measured: p95 72.9 ms over 100 sequential requests (`evidence/latency-p95.txt`).
 **D15 — Simplicity over layering in the API.** _(brief)_
 Controllers call EF Core directly. There is no repository/service/mediator stack, no
 AutoMapper and no CQRS. The system has one client and five features, and every extra
-layer is code to explain without a requirement to justify it. See O3 for how this
-reconciles with the UML.
+layer is code to explain without a requirement to justify it. The UML's InventoryRepository
+component is the EF Core `DbContext` class, named `InventoryRepository`. It is the data-access
+component, not an extra pattern on top of EF Core (O3).
+
+**D16 — Default model is `v1.1-relative`, a scale-free ratio model.** _(Mon 28, resolves O1)_
+v1.0-base predicts demand in absolute units, and its output is bounded by the Kaggle training
+range (O1): a 3/day item was forecast at 44. v1.1-relative predicts **the ratio of
+next-7-day mean demand to the item's own 30-day mean**. At serving time that ratio is
+multiplied by the item's 30-day mean.
+- The label alone is not enough. With absolute features (`roll_mean_7` etc.) the trees would
+  still split on volume. So every volume feature is divided by the 30-day mean too
+  (`features.RELATIVE_FEATURE_COLUMNS`, `add_relative_features()`), and `roll_mean_30`
+  itself is left out. Scaling an item's whole history by k then scales the forecast by k.
+  `build_features()` is unchanged, so v1.0 is untouched.
+- Evaluated on the same chronological test period (2023-09-03 to 2024-01-29, 14,900 rows)
+  in absolute units, against the same 30-day-average baseline:
+
+  | Model | MAPE | MAE | Baseline MAPE | Improvement |
+  |---|---|---|---|---|
+  | v1.0-base | 10.51% | 8.04 | 22.18% | 52.6% |
+  | v1.1-relative | 10.53% | 8.23 | 22.18% | 52.5% |
+
+- Flat-history scale check (`evidence/model-scale-check.txt`):
+
+  | Flat units/day | 3 | 10 | 30 | 90 | 300 |
+  |---|---|---|---|---|---|
+  | v1.0-base | 44.13 (+1371%) | 44.13 (+341%) | 45.90 (+53%) | 89.29 (−1%) | 148.36 (−51%) |
+  | v1.1-relative | 2.87 (−4%) | 9.57 (−4%) | 28.71 (−4%) | 86.13 (−4%) | 287.11 (−4%) |
+
+  The constant −4% is the model's learned expectation for a flat history on that date, the
+  same at every scale, which is what scale-free means. Poisson histories at a 3, 10 and 30/day
+  mean were forecast at 2.97, 10.64 and 28.20.
+- Decision rule set in advance: default to v1.1 if MAPE ≤ 20% and it beats the baseline by
+  ≥ 10%. Both were met, so the default was switched (`DEFAULT_MODEL_ID`). The fallback plan, a
+  guard in the API that bypasses the model outside its training range, was not needed.
+- The cost is 0.02 percentage points of MAPE on Kaggle-scale data. The gain is that the model
+  now works for the shops the project targets.
+- v1.0-base stays on disk, unmodified (md5 `c01e9ba4…`), and callable with
+  `modelId: "v1.0-base"`. `train.py` now refuses to overwrite an existing artefact without `--force`.
+- Parity check for v1.1: 194/194 identical (`evidence/model-serving-parity-v1.1-relative.txt`).
+- Known limit: the ratio is undefined when the 30-day mean is 0. Such an item gets a forecast
+  of 0 and confidence 0 (D11), which is the right answer for a product that isn't selling.
+
+**D17 — `daysUntilStockOut` is derived in the API, not returned by the model service.** _(Mon 28 — approved change since Assignment 2, for Q1.2)_
+The submitted sequence diagram shows ReorderPredictionService returning `daysUntilStockOut`.
+The implementation returns only demand (`predictedDailyDemand`, `confidence`,
+`lowConfidence`, `modelVersion`, `sufficientHistory`). The StockController computes
+`daysUntilStockOut = quantityOnHand ÷ predictedDailyDemand`. Reasons:
+- Quantity on hand lives in MySQL and changes with every stock movement. The API already has
+  it; the model service would need to be sent it just to divide by it.
+- The model service stays a pure function of sales history. The same prediction serves any
+  stock level, and the division uses the current quantity, not the one at request time.
+- The low-confidence fallback (ETR-03) is applied in the API, so stock-out days have to be
+  computed there anyway for the fallback case.
+This is a deliberate improvement on the diagram, recorded as an approved change, not a deviation.
 
 ---
 
@@ -179,10 +224,13 @@ reconciles with the UML.
 | `model-service/app.py` | ReorderPredictionService — the FastAPI app. |
 | `model-service/src/check_parity.py` | Proves serving features equal training features. |
 | `model-service/src/measure_latency.py` | 100 timed `POST /predict` requests → `evidence/latency-p95.txt`. |
+| `model-service/src/smoke_test.py` | Every endpoint and error path → `evidence/model-service-smoke.txt`. |
+| `model-service/src/check_scale.py` | Flat and Poisson histories at several volumes, per model → `evidence/model-scale-check.txt`. |
 | `model-service/src/inspect_dataset.py` | Checks a CSV is usable for training. |
 | `model-service/src/eda.py` | Exploratory analysis, demand profile. |
 | `model-service/src/make_synthetic.py` | Stand-in data with the Kaggle file's shape. |
-| `model-service/models/v1.0-base.joblib` | Trained artefact: model, feature columns, category map, metrics (git-ignored). |
+| `model-service/models/v1.1-relative.joblib` | Default model artefact: model, feature columns, target type, category map, metrics (git-ignored). |
+| `model-service/models/v1.0-base.joblib` | Original absolute model, kept unmodified (git-ignored). |
 | `docker-compose.yml` | MySQL 8 and the model service; api and client to be added. |
 | `evidence/` | Everything Assignment 3 cites. Checklist in `evidence/README.md`. |
 
@@ -206,15 +254,19 @@ MAPE 10.51% vs 22.18% baseline (`86de1ea`).
   Docker Compose container.
 - `measure_latency.py` did not exist, although it was referred to as if it did. Written
   this session.
-- Found O1. Options, for decision:
-  1. **Guard in the API** — if the item's 30-day mean falls outside the training range,
-     use the 30-day-average fallback and say so on screen. Smallest change, no retrain,
-     honest. The model is simply not used where it is not valid.
-  2. **Scale-free model** — predict demand relative to the item's own 30-day mean (with
-     ratio features), so it works at any volume. The proper fix, but it redesigns the
-     features and needs a retrain and re-evaluation. The 10.51% figure would change.
-  3. **Seed only volumes inside the training range** (40–150/day). Makes screenshots look
-     right while hiding the limitation. Not recommended.
+- Found O1. Options considered: (1) a guard in the API that bypasses the model outside its
+  training range; (2) a scale-free ratio model; (3) seeding only volumes inside the training
+  range. Option 3 was rejected because it hides the limitation. Chose 2, timeboxed to an
+  hour, with 1 as the fallback if v1.1 missed ETR-01.
+- Committed (`b4efa14`) before retraining. While adding the overwrite guard, a
+  training run overwrote `v1.0-base.joblib` by mistake. It was restored byte-for-byte from a backup taken
+  just before (md5 checked). The guard now prevents this.
+- Trained v1.1-relative: MAPE 10.53%, baseline 22.18%, 52.5% improvement. The scale check
+  shows −4% at every volume. Made it the default (D16). Latency with v1.1 default: p95
+  69.9 ms (v1.0 run kept as `evidence/latency-p95-v1.0-base.txt`). Smoke test 9/9.
+- Recorded D17: `daysUntilStockOut` moves from the model service to the API.
+- Build freeze is today; Assignment 3 is due Wed 30 Sep. Priority from here: database →
+  API → Angular, as a thin working slice.
 - Fixed the README: schedule dates now match their 2026 weekdays, file tree matches the
   real files, scope note shows FR-01 and FR-06/07 as Partial.
 
@@ -225,8 +277,14 @@ MAPE 10.51% vs 22.18% baseline (`86de1ea`).
 - **Why not a random split?** D1. The number would look better and mean less.
 - **How do you know there is no leakage?** D1 (chronological), D2 (shift), D4 (Demand excluded).
 - **Why not an LSTM, or deep learning?** D5.
-- **Does the model actually work for a spaza shop?** O1. Answer honestly: it was validated
-  at Kaggle volumes, and the prototype handles low volumes by [the option chosen].
+- **Does the model actually work for a spaza shop?** It does now, and the story is worth
+  telling (O1 → D16). The first model was bounded to 44–148/day by its training data. The
+  fix was to predict a ratio to the item's own average, and the evidence is the scale check:
+  −4% at 3/day and at 300/day. Be honest that accuracy was *measured* on Kaggle-scale
+  data. What was shown at spaza scale is that the forecast follows the item's own level.
+- **Why two models?** D16. The new one had to earn the default by a rule set in advance, and
+  the old one was kept so the comparison stays reproducible.
+- **Your sequence diagram shows the model returning daysUntilStockOut — why doesn't it?** D17.
 - **What does "confidence 0.95" mean?** D11. A variability score, not a probability.
 - **How do you know the live system computes the same features as training?** D9 and
   `evidence/model-serving-parity.txt`.

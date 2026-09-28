@@ -1,8 +1,8 @@
 IntelliStock - model service latency (POST /predict)
 ================================================================
-Run at        : 2026-09-28 18:18
+Run at        : 2026-09-28 17:48
 Target        : http://localhost:8000/predict
-Model         : v1.1-relative (loaded: True)
+Model         : v1.0-base (loaded: True)
 Server        : docker compose 'model-service' container (python:3.11-slim, 1 uvicorn worker), Docker Desktop 29.4.0 on the same machine as the client
 Client host   : Windows 11, AMD64, Python 3.12.10
 Method        : 5 warm-up requests (not timed), then 100 sequential
@@ -11,10 +11,10 @@ Method        : 5 warm-up requests (not timed), then 100 sequential
                 wall clock, so they include HTTP and JSON overhead.
 
 Requests      : 100   (HTTP 200: 100)
-Min           :    43.3 ms
-Mean          :    55.6 ms
-Median (p50)  :    53.8 ms
-p95           :    69.9 ms
-p99           :    81.0 ms
+Min           :    35.5 ms
+Mean          :    57.2 ms
+Median (p50)  :    56.8 ms
+p95           :    72.9 ms
+p99           :    83.6 ms
 Max           :    86.0 ms
-Std dev       :     8.0 ms
+Std dev       :    10.3 ms

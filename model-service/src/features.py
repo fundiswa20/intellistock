@@ -182,6 +182,38 @@ def build_features(df, for_training=True, cat_map=None):
     return df
 
 
+
+# v1.1-relative: every volume feature divided by the series' own 30-day mean, so the
+# model sees the shape of demand, not its size. A shop selling 5 a day and a store
+# selling 500 a day with the same pattern produce identical features. roll_mean_30
+# itself is left out on purpose - it is the only absolute quantity, and it is used to
+# scale the predicted ratio back into units.
+RELATIVE_FEATURE_COLUMNS = [
+    "rel_mean_7", "rel_mean_14",
+    "rel_std_7", "rel_std_30",
+    "trend_7_30",
+    "day_of_week", "day_of_month", "month",
+    "is_month_end_window",
+    "days_since_restock",
+    "category_code",
+]
+RELATIVE_TARGET = "ratio_to_roll_mean_30"
+
+
+def add_relative_features(df):
+    """Add the scale-free features used by v1.1-relative, from build_features() output."""
+    df = df.copy()
+    base = df["roll_mean_30"].replace(0, np.nan)
+    df["rel_mean_7"] = (df["roll_mean_7"] / base).fillna(1.0)
+    df["rel_mean_14"] = (df["roll_mean_14"] / base).fillna(1.0)
+    df["rel_std_7"] = (df["roll_std_7"] / base).fillna(0.0)
+    df["rel_std_30"] = (df["roll_std_30"] / base).fillna(0.0)
+    if "label" in df.columns:
+        # undefined where the 30-day mean is 0; those rows are not used for fitting
+        df["label_ratio"] = df["label"] / base
+    return df
+
+
 def chronological_split(df, test_fraction=0.2):
     """
     Split by date, not at random.

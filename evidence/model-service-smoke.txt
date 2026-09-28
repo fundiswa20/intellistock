@@ -1,21 +1,21 @@
 IntelliStock - model service smoke test
 ================================================================
-Run at : 2026-09-28 17:47
-Target : http://localhost:8000 (docker compose service 'model-service')
+Run at : 2026-09-28 18:18
+Target : http://localhost:8000
 
 [PASS] GET /health
        HTTP 200 (expected 200)
-       {"status": "ok", "defaultModel": "v1.0-base", "defaultModelLoaded": true, "modelsLoaded": ["v1.0-base"]}
+       {"status": "ok", "defaultModel": "v1.1-relative", "defaultModelLoaded": true, "modelsLoaded": ["v1.1-relative"]}
 
-[PASS] POST /predict - steady demand, 40 days
+[PASS] POST /predict - steady demand (mean 41.4/day), default model
        HTTP 200 (expected 200)
-       {"predictedDailyDemand": 53.509, "confidence": 0.952, "lowConfidence": false, "modelVersion": "v1.0-base", "sufficientHistory": true}
+       {"predictedDailyDemand": 40.317, "confidence": 0.952, "lowConfidence": false, "modelVersion": "v1.1-relative", "sufficientHistory": true}
 
 [PASS] POST /predict - erratic demand, expect lowConfidence=true (ETR-03)
        HTTP 200 (expected 200)
-       {"predictedDailyDemand": 52.151, "confidence": 0.411, "lowConfidence": true, "modelVersion": "v1.0-base", "sufficientHistory": true}
+       {"predictedDailyDemand": 33.922, "confidence": 0.411, "lowConfidence": true, "modelVersion": "v1.1-relative", "sufficientHistory": true}
 
-[PASS] POST /predict - explicit modelId
+[PASS] POST /predict - modelId v1.0-base still served
        HTTP 200 (expected 200)
        {"predictedDailyDemand": 53.509, "confidence": 0.952, "lowConfidence": false, "modelVersion": "v1.0-base", "sufficientHistory": true}
 
@@ -27,6 +27,10 @@ Target : http://localhost:8000 (docker compose service 'model-service')
        HTTP 404 (expected 404)
        {"detail": "Unknown model 'v9.9'"}
 
+[PASS] GET /models/v1.1-relative - stored metrics
+       HTTP 200 (expected 200)
+       {"modelId": "v1.1-relative", "version": "v1.1-relative", "trainedAt": "2026-09-28T18:16:25", "featureColumns": ["rel_mean_7", "rel_mean_14", "rel_std_7", "rel_std_30", "trend_7_30", "day_of_week", "day_of_month", "month", "is_month_end_window", "days_since_restock", "category_code"], "categories": ["Clothing", "Electronics", "Furniture", "Groceries", "Toys"], "metrics": {"mape": 10.532, "baseline_mape": 22.175, "improvement_pct": 52.5, "mae": 8.228, "test_rows": 14900, "test_start": "2023-09-03", "test_end": "2024-01-29"}}
+
 [PASS] GET /models/v1.0-base - stored metrics
        HTTP 200 (expected 200)
        {"modelId": "v1.0-base", "version": "v1.0-base", "trainedAt": "2026-09-28T17:37:11", "featureColumns": ["roll_mean_7", "roll_mean_14", "roll_mean_30", "roll_std_7", "roll_std_30", "trend_7_30", "day_of_week", "day_of_month", "month", "is_month_end_window", "days_since_restock", "category_code"], "categories": ["Clothing", "Electronics", "Furniture", "Groceries", "Toys"], "metrics": {"mape": 10.509, "baseline_mape": 22.175, "improvement_pct": 52.61, "mae": 8.038, "test_rows": 14900, "test_start": "2023-09-03", "test_end": "2024-01-29"}}
@@ -35,4 +39,4 @@ Target : http://localhost:8000 (docker compose service 'model-service')
        HTTP 404 (expected 404)
        {"detail": "Not Found"}
 
-8 of 8 checks passed
+9 of 9 checks passed

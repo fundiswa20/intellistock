@@ -15,7 +15,12 @@ Name files with the question number they answer, so they drop straight into the 
 | `model-feature-importance.png` | 4.1 | Mon 21 | ☑ Mon 21, regenerated Mon 28 |
 | `model-serving-parity.txt` — serving features identical to training features | 4.1, 5.1 | — | ☑ Mon 28 |
 | `model-service-smoke.txt` — every endpoint and error path, incl. 422 | 5.1 | — | ☑ Mon 28 |
-| `latency-p95.txt` — 100 timed requests | **5.2, 2.3** | Tue 22 | ☑ Mon 28 |
+| `model-evaluation-v1.1-relative.txt`, `model-metrics-v1.1-relative.json` — default model | **5.2, 2.3** | — | ☑ Mon 28 |
+| `model-feature-importance-v1.1-relative.png` | 4.1 | — | ☑ Mon 28 |
+| `model-serving-parity-v1.1-relative.txt` | 4.1, 5.1 | — | ☑ Mon 28 |
+| `model-scale-check.txt` — v1.0 vs v1.1 at 3–300 units/day | **4.1, 5.2** | — | ☑ Mon 28 |
+| `latency-p95.txt` — 100 timed requests, v1.1-relative default | **5.2, 2.3** | Tue 22 | ☑ Mon 28 |
+| `latency-p95-v1.0-base.txt` — same test, v1.0-base default | 5.2 | — | ☑ Mon 28 |
 | `erd.png` — entity relationship diagram | 4.2 | Wed 23 | ☐ |
 | `schema.sql` — final schema | 4.2 | Wed 23 | ☐ |
 | `api-postman.png` — endpoints returning real data | 4.3 | Fri 25 | ☐ |

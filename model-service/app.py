@@ -27,10 +27,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
-from features import build_features  # noqa: E402
+from features import RELATIVE_TARGET, add_relative_features, build_features  # noqa: E402
 
 MODEL_DIR = os.environ.get("MODEL_DIR", os.path.join(os.path.dirname(__file__), "models"))
-DEFAULT_MODEL_ID = os.environ.get("DEFAULT_MODEL_ID", "v1.0-base")
+DEFAULT_MODEL_ID = os.environ.get("DEFAULT_MODEL_ID", "v1.1-relative")
 
 MIN_HISTORY_DAYS = 30          # ETR-03: fewer than this and the 30-day features are not meaningful
 MAX_HISTORY_DAYS = 730         # only the last 31 days are used; this bounds the payload
@@ -110,7 +110,9 @@ def confidence_from_history(daily_sales):
 
 def serving_features(req, as_of, artefact):
     """
-    Build the single-row feature vector for as_of using features.build_features().
+    Build the single-row feature frame for as_of using features.build_features()
+    and features.add_relative_features(). It holds both feature sets; the caller
+    selects the artefact's feature_columns, and roll_mean_30 for relative models.
 
     The history is laid out as consecutive days ending the day before as_of, and a
     placeholder row is added for as_of itself. build_features() shifts sales by one
@@ -127,11 +129,12 @@ def serving_features(req, as_of, artefact):
         "units_ordered": 0,
     })
     df = build_features(frame, for_training=False, cat_map=artefact.get("category_map", {}))
+    df = add_relative_features(df)
     row = df[df["date"] == pd.Timestamp(as_of)].copy()
     # the API derives this from the transaction log, which is more accurate than
     # the counter build_features() falls back to when there are no restock rows
     row["days_since_restock"] = req.daysSinceRestock
-    return row[artefact["feature_columns"]]
+    return row
 
 
 # FR-08: reorder prediction, called by the API's StockController
@@ -144,8 +147,12 @@ def predict(req: PredictRequest):
     artefact = load_model(req.modelId or DEFAULT_MODEL_ID)
     as_of = req.asOfDate or date.today()
 
-    X = serving_features(req, as_of, artefact)
-    demand = max(0.0, float(artefact["model"].predict(X)[0]))
+    row = serving_features(req, as_of, artefact)
+    raw = float(artefact["model"].predict(row[artefact["feature_columns"]])[0])
+    if artefact.get("target") == RELATIVE_TARGET:
+        # v1.1-relative predicts a ratio to the item's own 30-day mean; scale it back to units
+        raw *= float(row["roll_mean_30"].iloc[0])
+    demand = max(0.0, raw)
     confidence = confidence_from_history(req.dailySales)
 
     return PredictResponse(
