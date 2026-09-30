@@ -40,6 +40,16 @@ public static class ReorderCalculator
     public static int RecommendedQuantity(double dailyDemand, int onHand, int reorderLevel) =>
         Math.Max(0, (int)Math.Ceiling(dailyDemand * CoverDays + reorderLevel - onHand));
 
+    // The recommended reorder date: the day stock is forecast to reach the reorder level,
+    // i.e. today + floor((Q - R) / d) days, or today if it is already there. With no demand,
+    // an item above its reorder level never needs reordering (null).
+    public static DateOnly? ReorderByDate(DateOnly today, int onHand, int reorderLevel, double dailyDemand)
+    {
+        if (onHand <= reorderLevel) return today;
+        if (dailyDemand <= 0) return null;
+        return today.AddDays((int)Math.Floor((onHand - reorderLevel) / dailyDemand));
+    }
+
     public const double ConfidenceThreshold = 0.6;   // ETR-03; applied by the model service's lowConfidence flag
 
     // ETR-03 names the non-model path "threshold-based advice"; the response uses the same words

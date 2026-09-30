@@ -58,6 +58,19 @@ public class ReorderCalculatorTests
         double demand, int onHand, int reorderLevel, int expected) =>
         Assert.Equal(expected, RecommendedQuantity(demand, onHand, reorderLevel));
 
+    [Theory]
+    [InlineData(20, 4, 2.0, "2026-09-29")]   // (20 - 4) / 2 = 8 days
+    [InlineData(20, 4, 3.0, "2026-09-26")]   // 16 / 3 = 5.33 -> 5 days: reorder on the day, not after
+    [InlineData(4, 4, 2.0, "2026-09-21")]    // already at the reorder level: today
+    [InlineData(0, 6, 22.1, "2026-09-21")]   // empty shelf: today
+    public void Reorder_date_is_when_stock_is_forecast_to_reach_the_reorder_level(
+        int onHand, int level, double demand, string expected) =>
+        Assert.Equal(DateOnly.Parse(expected), ReorderByDate(Mon21, onHand, level, demand));
+
+    [Fact]
+    public void No_reorder_date_when_nothing_is_selling_and_stock_is_above_the_level() =>
+        Assert.Null(ReorderByDate(Mon21, 12, 4, 0));
+
     // ETR-03: the response must say which path produced the recommendation
 
     [Fact]

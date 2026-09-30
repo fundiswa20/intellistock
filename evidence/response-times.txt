@@ -1,0 +1,26 @@
+IntelliStock - NFR-02 response time: GET /api/stock (stock list)
+======================================================================
+Run at          : 2026-09-30 11:40
+Endpoint        : GET http://localhost:5000/api/stock  (authenticated, valid JWT for nomvula@intellistock.test)
+Stack           : docker compose - api (ASP.NET Core 8) -> db (MySQL 8.0.45), both in Docker,
+                  Docker Desktop on the same Windows machine as the client
+Client          : Python 3.12.10 urllib, Windows 11
+Data returned   : 23 stock items per response, 4,805 bytes of JSON
+Method          : 5 warm-up requests (not timed), then 50 timed requests,
+                  SEQUENTIAL - one at a time, one user, no concurrency. Client wall-clock time,
+                  including HTTP, JSON serialisation and the database query.
+
+Requests timed  : 50   (HTTP 200: 50)
+p50 (median)    :    13.5 ms
+p95             :    34.6 ms
+Max             :    43.6 ms
+Min             :     6.7 ms
+Mean            :    16.7 ms
+
+Against NFR-02 (95th-percentile response under 3 seconds for up to 50 concurrent users)
+----------------------------------------------------------------------
+  Single-user sequential p95 of 34.6 ms is under the 3,000 ms target.
+  WHAT THIS DOES NOT SHOW: behaviour under concurrent load. No concurrency test was
+  run - there was no test with 50 simultaneous users, so the concurrency part of
+  NFR-02 is not evidenced here. A load test (for example 50 virtual users with k6 or
+  JMeter against the same endpoint) is needed to evidence it.

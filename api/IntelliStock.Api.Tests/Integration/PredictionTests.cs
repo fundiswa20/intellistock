@@ -61,6 +61,9 @@ public class PredictionTests(ApiFactory api) : IDisposable
         // D17: computed by the API, not the model
         Assert.Equal(Math.Round(onHand / 2.5m, 1), p.GetProperty("daysUntilStockOut").GetDecimal());
         Assert.Equal((int)Math.Max(0, Math.Ceiling(2.5 * 7 + level - onHand)), p.GetProperty("recommendedQuantity").GetInt32());
+        var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(2));
+        var expectedDate = onHand <= level ? today : today.AddDays((int)Math.Floor((onHand - level) / 2.5));
+        Assert.Equal(expectedDate.ToString("yyyy-MM-dd"), p.GetProperty("reorderByDate").GetString());
     }
 
     [Fact]

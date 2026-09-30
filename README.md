@@ -74,7 +74,7 @@ bash db/verify.sh
 |---|---|
 | Model service | http://localhost:8000/docs |
 | API | http://localhost:5000 (Swagger UI at /swagger) |
-| Client | http://localhost:4200 (not built yet) |
+| Client | http://localhost:4201 (build first: `cd client && npm install && npm run build`) |
 | MySQL | localhost:3308 (container port 3306; set DB_PORT to change) |
 
 ## Dataset

@@ -15,8 +15,8 @@ _Last updated: Mon 28 Sep 2026._
 | Model training + evaluation | — | **Done.** Default model `v1.1-relative`: MAPE 10.53% vs 22.18% baseline, works at any sales volume (D16). `v1.0-base` (10.51%) kept. |
 | Model service | ReorderPredictionService | **Done.** `POST /predict`, `GET /health`, `GET /models/{id}`, running in Docker Compose. p95 latency 72.7 ms. Confidence measured on weekly totals (D31). |
 | MySQL schema + seed | all 8 UML classes | **Done.** 8 tables, FR-04 immutability enforced by triggers, 120 days of spaza-shop history (5,570 transactions). Verified: `evidence/db-verification.txt`. |
-| API | AuthController, StockController, InventoryRepository | **Done.** ASP.NET Core 8, EF Core 8 + Pomelo, JWT. 41 unit + 32 integration tests pass; end-to-end 15/15. Runs in Docker Compose on port 5000. |
-| Client | InventoryDashboard | Not started. Minimal two-screen client planned for Tue 29 (screenshots and user guide); the full client is for Assignment 4. |
+| API | AuthController, StockController, InventoryRepository | **Done.** ASP.NET Core 8, EF Core 8 + Pomelo, JWT. 46 unit + 32 integration tests pass; end-to-end 15/15. GET /api/stock p95 34.6 ms (single user, sequential). Port 5000. |
+| Client | InventoryDashboard | **Built, partly verified.** Angular 17: login, stock list, item detail with movement form and recommendation panel. Builds and serves in Docker on port 4201; the login screen renders. The signed-in screens have not yet been checked in a browser against seeded data (see session log, Tue 29). |
 
 **Requirements — traceability status for Assignment 3**
 
@@ -37,6 +37,7 @@ and tested in the API but has no client screen yet (the minimal client is Tue 29
 | FR-09 | Consolidated reorder plan | Not met | Deferred. | — |
 | FR-10 | Order placement and status tracking | Not met | Deferred; ordering is not part of the prototype scope. | — |
 | ETR-01 | MAPE ≤ 20% and ≥ 10% better than baseline | Pass | v1.1-relative 10.53% vs 22.18% baseline (52.5% better), chronological test period. | `model-evaluation-v1.1-relative.txt` |
+| NFR-02 | p95 response < 3 s for up to 50 concurrent users | Partial | Single-user sequential p95 34.6 ms on GET /api/stock (23 items, Docker). No concurrency test was run. | `response-times.txt` |
 | ETR-03 | Insufficient history and low confidence handled | Pass | Model service: 422 under 30 days and `lowConfidence` under 0.6. API: threshold-based advice with the reason recorded and shown (D25). | `model-service-smoke.txt`, `tests-integration.txt` |
 
 **Open issues**
@@ -374,6 +375,29 @@ back from the most recent day, over *K* = min(8, ⌊*n*/7⌋) weeks (an incomple
 - Latency after the change: p95 84.9 ms on a first run just after a container rebuild, and
   72.7 ms on the re-run that is recorded. The change adds a reshape and a sum.
 
+**D33 — The recommendation includes a reorder-by date.** _(Tue 29)_
+`reorderByDate` = today + ⌊(*Q* − *R*) / *d*⌋ days: the day stock is forecast to reach the
+reorder level. It is today if *Q* ≤ *R*, and none if *d* = 0 and *Q* > *R*. It's derived in the API
+with the other reorder arithmetic (D26), on both paths.
+
+**D34 — Braai wood added to the seed as a genuinely erratic product; it did not trip the flag.** _(Tue 29)_
+Braai wood has real event-driven demand: weekends, public holidays (Heritage Day is National
+Braai Day), payday weekends, wet Cape winter weeks. It also has a real supply gap, an informal wood
+seller who comes every 5–14 days. It uses its own random stream, so the other 28 items' seeded
+rows are byte-identical (0 rows changed, 126 added). The drivers came from the domain and were
+not tuned to the threshold. Result: weekly totals over the last 8 weeks of 4, 15, 5, 5, 13, 12,
+10, 12, and confidence **0.705**, above 0.6. As agreed in advance, it stays as is. The
+threshold-based path is demonstrated with the short-history item (Fatti's & Moni's Spaghetti,
+`insufficientHistory`). The low-confidence branch is evidenced by the tests and the model smoke
+test, not by a seeded screen.
+
+**D35 — The client container serves a prebuilt app.** _(Tue 29)_
+`client/Dockerfile` copies `dist/client/browser` and serves it with a dependency-free Node
+server (`client/server.js`, SPA fallback so deep links work) on `node:20-alpine`. Building inside
+the image would repeat the `npm install`, and the network here was resetting npm connections, so
+the install took three attempts. So `npm install && npm run build` runs on the host first. Port
+4201, because 4200 is taken on the dev machine.
+
 **D32 — AuthController is added to the component diagram.** _(Mon 28 — approved change since Assignment 2, for Q1.2)_
 The submitted component diagram lists InventoryDashboard, StockController, InventoryRepository
 and ReorderPredictionService. FR-02 needs a login endpoint that works *before* the user is
@@ -510,6 +534,26 @@ MAPE 10.51% vs 22.18% baseline (`86de1ea`).
   states the exact threshold-based-advice formula. AuthController recorded as an approved change
   (D32). Limitations written up (L1–L4). 41 unit and 32 integration tests pass; end-to-end
   15/15; model smoke 9/9. Build freeze.
+
+**Tue 29 Sep**
+- Braai wood added to the seed (D34): confidence 0.705, not flagged, left as is. Database
+  reloaded from the new seed; `db/verify.sh` 0 mismatches, 7/7 rejected statements.
+- `reorderByDate` added to the prediction response (D33).
+- Angular client built (D35). Docker Desktop had to be restarted and took several minutes to
+  come up, and npm installs failed twice on connection resets. The client builds and
+  serves, and the login screen renders. The first browser sign-in attempt typed into the wrong
+  field, and verification of the signed-in screens was not completed.
+
+**Wed 30 Sep**
+- Test evidence regenerated so the totals match the code: 46 unit, 32 integration, 15 end-to-end.
+- NFR-02 measured (`evidence/response-times.txt`): GET /api/stock, 50 sequential requests after
+  5 warm-ups, 23 items per response, in Docker: p50 13.5 ms, p95 34.6 ms, max 43.6 ms. Single
+  user only; no concurrency test was run, and the file says so. (The request named
+  `GET /api/stock-items`, which does not exist; the stock list endpoint is `GET /api/stock`.)
+- **Seed data ages.** History ends on 27 Sep, so each later day enters the model's input as a
+  zero-sales day. By 30 Sep, bread's forecast had fallen from 22.1 to 17.6 a day. Before
+  screenshots or a demo, regenerate the seed to end yesterday
+  (`python db/seed/generate_seed.py --end <yesterday>`) and reload the database.
 - Fixed the README: schedule dates now match their 2026 weekdays, file tree matches the
   real files, scope note shows FR-01 and FR-06/07 as Partial.
 

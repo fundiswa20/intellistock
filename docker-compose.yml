@@ -44,7 +44,13 @@ services:
       model-service:
         condition: service_started
 
-  # client:   Angular 17 - not built yet
+  client:
+    build: ./client          # run `npm install && npm run build` in client/ first
+    container_name: intellistock-client
+    ports:
+      - "${CLIENT_PORT:-4201}:4201"   # 4200 is taken on the dev machine by another project
+    depends_on:
+      - api
 
 volumes:
   db-data:

@@ -25,7 +25,7 @@ Name files with the question number they answer, so they drop straight into the 
 | `schema.sql` — final schema (mysqldump of the live database) | 4.2 | Wed 23 | ☑ Mon 28 |
 | `db-verification.txt` — row counts, consistency checks, rejected statements | **4.2, 5.1** | — | ☑ Mon 28 |
 | `api-postman.png` — endpoints returning real data | 4.3 | Fri 25 | ☐ |
-| `tests-unit.txt` — `dotnet test` output to file, 41 tests | **5.1** | Fri 25 | ☑ Mon 28 |
+| `tests-unit.txt` — `dotnet test` output to file, 46 tests | **5.1** | Fri 25 | ☑ Mon 28 |
 | `tests-integration.txt` — 32 tests, real MySQL | **5.1** | Fri 25 | ☑ Mon 28 |
 | `api-endpoints.txt` — every endpoint against the running stack, real model | 4.3 | — | ☑ Mon 28 |
 | `confidence-before-after.txt` — path per item, daily vs weekly confidence (D31) | **5.2, 5.4** | — | ☑ Mon 28 |
@@ -33,7 +33,7 @@ Name files with the question number they answer, so they drop straight into the 
 | `4.1-stock-list.png` | 4.1, 5.3 | Sat 26 | ☐ |
 | `4.1-stock-item-recommendation.png` — the money shot | **4.1, 5.3** | Sat 26 | ☐ |
 | `4.1-alerts.png` | 4.1, 5.3 | Sat 26 | ☐ |
-| `response-times.txt` — page load measurements | **5.2** | Sun 27 | ☐ |
+| `response-times.txt` — GET /api/stock, 50 sequential requests, single user (NFR-02) | **5.2** | Sun 27 | ☑ Wed 30 |
 | `docker-compose-up.png` — all services running | 4.4 | Sun 27 | ☐ |
 | `git-log.txt` — `git log --oneline` | 4.1 | Mon 28 | ☐ |
 

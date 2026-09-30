@@ -19,6 +19,11 @@ What the simulation models, so the screens and the model have something real to 
 - candles: spikes during load-shedding weeks; paraffin: higher in winter
 - sales cannot exceed stock on hand (a stock-out loses the sale, as in a real shop)
 - one item added two weeks before the end, so it has too little history (ETR-03)
+- braai wood: sold mostly at weekends, spiking on public holidays (Heritage Day is
+  National Braai Day) and payday weekends, suppressed in wet winter weeks, and supplied
+  by an informal wood seller who comes every 5-14 days - so demand is genuinely erratic
+  week to week, and supply gaps cause real stock-outs. It draws from its own random
+  stream, so adding it left every other item's history unchanged.
 
 All categories are 'Groceries': the model only knows five categories and spaza
 stock is groceries (BUILD-JOURNAL O2).
@@ -42,6 +47,8 @@ LOAD_SHEDDING = [(date(2026, 6, 8), date(2026, 6, 13)),
                  (date(2026, 7, 20), date(2026, 7, 26)),
                  (date(2026, 9, 15), date(2026, 9, 20))]
 WEEKDAY_FACTOR = [0.9, 0.9, 0.95, 1.0, 1.25, 1.35, 0.8]   # Mon..Sun
+BRAAI_WEEKDAY = [0.5, 0.5, 0.6, 0.8, 1.6, 2.4, 2.0]       # braai wood sells at weekends
+WET_WEEK_CHANCE = {5: 0.2, 6: 0.45, 7: 0.45, 8: 0.35, 9: 0.2}   # Cape Town winter rain, by month
 
 USERS = [
     # id, email, full name, role
@@ -87,6 +94,7 @@ NOMVULA_ITEMS = [
     ("Paraffin 1L", "bottle", 2.5, 20.00, 26.99, 4, 20, "wholesale", {"pattern": "paraffin"}),
     ("Inkomazi Amasi 2L", "bottle", 2.6, 35.00, 42.99, 4, 6, "wholesale"),
     ("Fatti's & Moni's Spaghetti 500g", "packet", 1.8, 17.00, 22.99, 3, 10, "wholesale", {"start": date(2026, 9, 14)}),
+    ("Braai Wood Bundle 5kg", "bundle", 1.3, 28.00, 39.99, 5, 1, "informal", {"pattern": "braai", "rng_seed": 7042}),
 ]
 SIPHO_ITEMS = [
     ("Albany Brown Bread 700g", "loaf", 15, 16.50, 19.99, 5, 1, "bakery"),
@@ -135,6 +143,14 @@ def demand_rate(item, d):
         lam *= 6
     if pattern == "paraffin":
         lam *= {5: 1.2, 6: 1.6, 7: 1.6, 8: 1.3}.get(d.month, 0.8)
+    if pattern == "braai":
+        lam *= BRAAI_WEEKDAY[d.weekday()] / WEEKDAY_FACTOR[d.weekday()]
+        if d in HOLIDAYS:
+            lam *= 5                    # a public holiday is a braai day; 24 Sep is Braai Day
+        elif d + timedelta(1) in HOLIDAYS:
+            lam *= 1.8                  # buying the day before
+        if d - timedelta(d.weekday()) in item["wet_weeks"]:
+            lam *= 0.35                 # a wet Cape winter week: nobody braais in the rain
     return lam
 
 
@@ -166,7 +182,19 @@ def simulate_shop(owner_id, specs, first_item_id, start, end, rng):
         items.append({"id": first_item_id + n, "name": name, "unit": unit, "rate": rate,
                       "cost": cost, "price": price, "reorder": reorder, "pack": pack,
                       "supply": supply, "start": max(start, extra.get("start", start)),
-                      "pattern": extra.get("pattern"), "on_hand": 0, "open_alert": None})
+                      "pattern": extra.get("pattern"), "on_hand": 0, "open_alert": None,
+                      # an item with its own random stream leaves the others' draws unchanged
+                      "rng": random.Random(extra["rng_seed"]) if "rng_seed" in extra else None})
+        it = items[-1]
+        r = it["rng"] or rng
+        monday = start - timedelta(start.weekday())
+        it["wet_weeks"] = set()
+        if it["pattern"] == "braai":
+            while monday <= end:
+                if r.random() < WET_WEEK_CHANCE.get(monday.month, 0):
+                    it["wet_weeks"].add(monday)
+                monday += timedelta(7)
+            it["next_delivery"] = start + timedelta(r.randint(3, 7))
 
     def move(item, kind, change, when, note=None):
         item["on_hand"] += change
@@ -215,10 +243,17 @@ def simulate_shop(owner_id, specs, first_item_id, start, end, rng):
                     packs = math.ceil((target - it["on_hand"]) / it["pack"])
                     move(it, "Restock", packs * it["pack"],
                          datetime.combine(d, time(9, 15)), "Wholesaler trip")
+            elif it["supply"] == "informal" and d >= it["next_delivery"]:
+                # the wood seller comes when he comes: 5 to 14 days apart
+                if it["on_hand"] < 24:
+                    move(it, "Restock", 24 - it["on_hand"],
+                         datetime.combine(d, time(10, 30)), "Wood seller delivery")
+                it["next_delivery"] = d + timedelta((it["rng"] or rng).choice([5, 6, 7, 7, 8, 9, 10, 12, 14]))
 
             # sales, recorded as a midday and a closing tally
-            demand = poisson(rng, demand_rate(it, d))
-            midday = round(demand * rng.uniform(0.35, 0.5))
+            r = it["rng"] or rng
+            demand = poisson(r, demand_rate(it, d))
+            midday = round(demand * r.uniform(0.35, 0.5))
             for qty, t in ((midday, time(13, 0)), (demand - midday, time(19, 30))):
                 qty = min(qty, it["on_hand"])      # a stock-out loses the sale
                 if qty > 0:
@@ -250,7 +285,7 @@ def main():
         "-- IntelliStock seed data - GENERATED by db/seed/generate_seed.py, do not edit by hand.",
         f"-- History: {start} to {end} ({args.days} days) for Nomvula's Spaza; 60 days for Sipho's Tuck Shop.",
         f"-- Test login for every seeded user: password '{TEST_PASSWORD}' (test data only).",
-        "--   nomvula@intellistock.test  - BusinessOwner, 22 items",
+        "--   nomvula@intellistock.test  - BusinessOwner, 23 items",
         "--   sipho@intellistock.test    - BusinessOwner, 6 items (proves owners only see their own stock)",
         "",
         "SET NAMES utf8mb4;",
@@ -282,7 +317,7 @@ def main():
         seen.setdefault(it["name"], it)
     for sid, lead, markup in ((3, 1, 1.00), (4, 2, 0.96), (5, 3, 1.04)):
         for name, it in seen.items():
-            if it["supply"] == "bakery" or rng.random() < 0.15:
+            if it["supply"] in ("bakery", "informal") or rng.random() < 0.15:
                 continue                       # not every supplier stocks everything
             pack = max(it["pack"], 1)
             price = round(it["cost"] * pack * markup * rng.uniform(0.95, 1.05), 2)
