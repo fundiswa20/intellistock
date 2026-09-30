@@ -131,10 +131,24 @@ public class MovementAndAlertTests(ApiFactory api)
     [Fact]
     public async Task Owners_only_see_alerts_for_their_own_stock()
     {
+        // each owner creates an item that starts below its reorder level, so both have an
+        // open alert - the test does not depend on what the seed leaves open
+        var (nomvula, nomvulaItem) = await NewItem("Test Nomvula Low Item", opening: 1, reorderLevel: 5);
         var sipho = await api.LoginAs("sipho@intellistock.test");
-        var alerts = await sipho.GetFromJsonAsync<JsonElement[]>("/api/stock/alerts");
-        Assert.NotEmpty(alerts!);   // the seed leaves Sipho with open alerts
-        foreach (var id in alerts!.Select(a => a.GetProperty("stockItemId").GetInt32()))
+        var created = await (await sipho.PostAsJsonAsync("/api/stock",
+            StockItemTests.NewItem("Test Sipho Low Item", opening: 1, reorderLevel: 5))).Content.ReadFromJsonAsync<JsonElement>();
+        var siphoItem = created.GetProperty("stockItemId").GetInt32();
+
+        var siphoAlerts = (await sipho.GetFromJsonAsync<JsonElement[]>("/api/stock/alerts"))!
+            .Select(a => a.GetProperty("stockItemId").GetInt32()).ToArray();
+        var nomvulaAlerts = (await nomvula.GetFromJsonAsync<JsonElement[]>("/api/stock/alerts"))!
+            .Select(a => a.GetProperty("stockItemId").GetInt32()).ToArray();
+
+        Assert.Contains(siphoItem, siphoAlerts);
+        Assert.DoesNotContain(nomvulaItem, siphoAlerts);
+        Assert.Contains(nomvulaItem, nomvulaAlerts);
+        Assert.DoesNotContain(siphoItem, nomvulaAlerts);
+        foreach (var id in siphoAlerts)
             Assert.Equal(2, await ApiFactory.Scalar<int>($"SELECT BusinessOwnerId FROM StockItem WHERE StockItemId = {id}"));
     }
 }

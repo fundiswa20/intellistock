@@ -554,6 +554,25 @@ MAPE 10.51% vs 22.18% baseline (`86de1ea`).
   zero-sales day. By 30 Sep, bread's forecast had fallen from 22.1 to 17.6 a day. Before
   screenshots or a demo, regenerate the seed to end yesterday
   (`python db/seed/generate_seed.py --end <yesterday>`) and reload the database.
+- Seed regenerated to end 29 Sep and reloaded. Forecasts recovered: bread 22.43/day (17.6 on
+  the aged seed), chips 20.02. Side effect: **0 items low and 0 open alerts**, because the
+  simulated owner's Monday 28 Sep wholesaler trip made up the Heritage Day shortfall. The data
+  wasn't adjusted to bring the shortages back.
+- Two checks turned out to depend on the seed leaving an open alert, and both failed on the new
+  seed. `db/verify.sh`'s duplicate-alert check copied an existing open alert, so with none it
+  inserted zero rows and "succeeded". It now inserts two open alerts for one item in a single
+  statement, and the alert count is confirmed unchanged. The integration test
+  `Owners_only_see_alerts_for_their_own_stock` now creates a low item for each owner.
+  Results: 7/7 rejected statements, 46 unit + 32 integration tests, 15/15 end-to-end.
+- Client verified in the browser as nomvula@intellistock.test. The stock list matched the
+  database on all 23 rows (name, quantity, reorder level, badge). Item detail showed the forecast,
+  confidence, model version, reorder date, quantity and basis line. Recording a sale of 1 Sasko
+  White Bread (6 → 5, reorder level 5) updated the quantity, turned the badge red, raised the
+  alert, added the log row and refreshed the recommendation (99 → 100 loaves). The
+  short-history item shows the amber threshold-based-advice panel. That test sale is now
+  permanent in the demo data (TransactionId 5664, "Walk-in sale").
+- Cosmetic, not fixed: the movement confirmation reads "Recorded sale of -1" instead of
+  "Recorded sale of 1".
 - Fixed the README: schedule dates now match their 2026 weekdays, file tree matches the
   real files, scope note shows FR-01 and FR-06/07 as Partial.
 

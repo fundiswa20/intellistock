@@ -1,23 +1,23 @@
 IntelliStock API - Unit tests
 ================================================================
-Run at   : 2026-09-30 11:39
+Run at   : 2026-09-30 11:51
 Command  : dotnet test --filter Category=Unit --logger "console;verbosity=normal"
-Commit   : 5483bb5 + working tree
+Commit   : b558226 + working tree
 
 Test run for C:\Users\biztw\Desktop\fundiswa\intellistock\api\IntelliStock.Api.Tests\bin\Debug\net8.0\IntelliStock.Api.Tests.dll (.NETCoreApp,Version=v8.0)
 VSTest version 17.14.1 (x64)
 Starting test execution, please wait...
 A total of 1 test files matched the specified pattern.
 [xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v2.5.3.1+6b60a9e56a (64-bit .NET 8.0.19)
-[xUnit.net 00:00:01.54]   Discovering: IntelliStock.Api.Tests
-[xUnit.net 00:00:01.68]   Discovered:  IntelliStock.Api.Tests
-[xUnit.net 00:00:01.69]   Starting:    IntelliStock.Api.Tests
-  Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.Days_until_stock_out_is_zero_for_an_empty_shelf [358 ms]
-  Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Zero_or_wrong_sign_quantities_are_rejected(type: "Adjustment", quantity: 0) [356 ms]
+[xUnit.net 00:00:00.12]   Discovering: IntelliStock.Api.Tests
+[xUnit.net 00:00:00.21]   Discovered:  IntelliStock.Api.Tests
+[xUnit.net 00:00:00.21]   Starting:    IntelliStock.Api.Tests
+  Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Zero_or_wrong_sign_quantities_are_rejected(type: "Adjustment", quantity: 0) [5 ms]
+  Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.Days_until_stock_out_is_zero_for_an_empty_shelf [7 ms]
   Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Zero_or_wrong_sign_quantities_are_rejected(type: "Sale", quantity: -2) [< 1 ms]
+  Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.Days_until_stock_out_is_null_when_nothing_is_selling [< 1 ms]
   Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Zero_or_wrong_sign_quantities_are_rejected(type: "Sale", quantity: 0) [< 1 ms]
   Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Zero_or_wrong_sign_quantities_are_rejected(type: "Restock", quantity: 0) [< 1 ms]
-  Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.Days_until_stock_out_is_null_when_nothing_is_selling [< 1 ms]
   Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Zero_or_wrong_sign_quantities_are_rejected(type: "Restock", quantity: -5) [< 1 ms]
   Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.Recommended_quantity_covers_a_week_of_demand_plus_the_reorder_level(demand: 1, onHand: 50, reorderLevel: 3, expected: 0) [2 ms]
   Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Alert_is_raised_at_or_below_the_reorder_level_and_resolved_above_it(onHand: 2, level: 5, open: False, expected: Raise) [2 ms]
@@ -30,9 +30,9 @@ A total of 1 test files matched the specified pattern.
   Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Alert_is_raised_at_or_below_the_reorder_level_and_resolved_above_it(onHand: 6, level: 5, open: True, expected: Resolve) [< 1 ms]
   Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Alert_is_raised_at_or_below_the_reorder_level_and_resolved_above_it(onHand: 6, level: 5, open: False, expected: None) [< 1 ms]
   Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.Days_since_restock_counts_from_the_last_restock_or_else_creation [< 1 ms]
-  Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Only_categories_the_model_knows_are_accepted [9 ms]
+  Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Only_categories_the_model_knows_are_accepted [10 ms]
   Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Sale_of_more_than_is_on_hand_is_rejected [< 1 ms]
-  Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.Fallback_demand_is_the_average_of_the_last_30_days [13 ms]
+  Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.Fallback_demand_is_the_average_of_the_last_30_days [14 ms]
   Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Sale_of_the_whole_shelf_is_allowed [3 ms]
   Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Alert_message_uses_the_right_plural [< 1 ms]
   Passed IntelliStock.Api.Tests.Unit.StockRulesTests.Unknown_movement_type_is_rejected [< 1 ms]
@@ -48,18 +48,18 @@ A total of 1 test files matched the specified pattern.
   Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.A_fallback_is_labelled_threshold_based_advice_with_the_reason(reason: "insufficientHistory", expected: "average sales over 13 days, because the model need"···) [1 ms]
   Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.A_fallback_is_labelled_threshold_based_advice_with_the_reason(reason: "lowConfidence", expected: "because the model's confidence 0.44 is below 0.6") [1 ms]
   Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.A_fallback_is_labelled_threshold_based_advice_with_the_reason(reason: "modelUnavailable", expected: "because the prediction service could not be reache"···) [< 1 ms]
-  Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.Fallback_demand_is_zero_with_no_history [2 ms]
+  Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.Fallback_demand_is_zero_with_no_history [3 ms]
   Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.Daily_series_is_oldest_first_with_zeros_for_days_without_sales [2 ms]
   Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.Fallback_demand_uses_what_history_exists_under_30_days [< 1 ms]
   Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.A_model_recommendation_is_labelled_as_the_model_with_its_version_and_confidence [< 1 ms]
   Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.No_reorder_date_when_nothing_is_selling_and_stock_is_above_the_level [< 1 ms]
-[xUnit.net 00:00:02.47]   Finished:    IntelliStock.Api.Tests
+[xUnit.net 00:00:00.68]   Finished:    IntelliStock.Api.Tests
   Passed IntelliStock.Api.Tests.Unit.ReorderCalculatorTests.Days_until_stock_out_is_stock_on_hand_over_daily_demand [< 1 ms]
-  Passed IntelliStock.Api.Tests.Unit.PasswordHashTests.Seeded_hash_rejects_a_wrong_password [453 ms]
-  Passed IntelliStock.Api.Tests.Unit.PasswordHashTests.Seeded_hash_verifies_with_the_seeded_test_password(email: "orders@ubuntu-wholesale.test") [91 ms]
-  Passed IntelliStock.Api.Tests.Unit.PasswordHashTests.Seeded_hash_verifies_with_the_seeded_test_password(email: "nomvula@intellistock.test") [87 ms]
-  Passed IntelliStock.Api.Tests.Unit.PasswordHashTests.Seeded_hash_verifies_with_the_seeded_test_password(email: "sipho@intellistock.test") [78 ms]
+  Passed IntelliStock.Api.Tests.Unit.PasswordHashTests.Seeded_hash_rejects_a_wrong_password [104 ms]
+  Passed IntelliStock.Api.Tests.Unit.PasswordHashTests.Seeded_hash_verifies_with_the_seeded_test_password(email: "orders@ubuntu-wholesale.test") [104 ms]
+  Passed IntelliStock.Api.Tests.Unit.PasswordHashTests.Seeded_hash_verifies_with_the_seeded_test_password(email: "nomvula@intellistock.test") [86 ms]
+  Passed IntelliStock.Api.Tests.Unit.PasswordHashTests.Seeded_hash_verifies_with_the_seeded_test_password(email: "sipho@intellistock.test") [107 ms]
 Test Run Successful.
 Total tests: 46
      Passed: 46
- Total time: 4.9378 Seconds
+ Total time: 1.3965 Seconds

@@ -44,12 +44,18 @@ must_fail() {
         "INSERT INTO \`Transaction\` (StockItemId, Type, QuantityChange, QuantityAfter, OccurredAt, RecordedByUserId) VALUES (1, 'Sale', 5, 10, NOW(), 1);"
     must_fail "Stock cannot go negative" \
         "UPDATE StockItem SET QuantityOnHand = -1 WHERE StockItemId = 1;"
+    # two open alerts for the same item in one statement: the second breaks the unique key, so
+    # the whole statement is rolled back and nothing is written. Self-contained - it does not
+    # depend on the seed happening to leave an open alert.
+    ALERTS_BEFORE=$(echo "SELECT COUNT(*) FROM Alert;" | docker exec -i intellistock-db mysql -uroot -p"$PW" -N intellistock 2>/dev/null)
     must_fail "FR-05: only one open alert per item" \
-        "INSERT INTO Alert (StockItemId, Message, QuantityAtAlert, ReorderLevel, CreatedAt) SELECT StockItemId, 'duplicate', 0, 0, NOW() FROM Alert WHERE ResolvedAt IS NULL LIMIT 1;"
+        "INSERT INTO Alert (StockItemId, Message, QuantityAtAlert, ReorderLevel, CreatedAt) VALUES (1, 'duplicate test', 0, 0, NOW()), (1, 'duplicate test', 0, 0, NOW());"
     must_fail "FR-02: email addresses are unique" \
         "INSERT INTO RegisteredUser (Email, PasswordHash, FullName, Role) VALUES ('nomvula@intellistock.test', 'x', 'Duplicate', 'BusinessOwner');"
     echo "Transaction count after the tests (unchanged from check 1):"
     echo "SELECT COUNT(*) AS \`rows\` FROM \`Transaction\`;" | mysql
+    echo "Alert count before the duplicate-alert test: $ALERTS_BEFORE. After (must be the same):"
+    echo "SELECT COUNT(*) AS \`rows\` FROM Alert;" | mysql
 } > "$OUT"
 
 docker exec intellistock-db mysqldump -uroot -p"$PW" --no-data --triggers --skip-comments \
