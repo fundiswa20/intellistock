@@ -229,7 +229,11 @@ export class StockItemComponent implements OnInit {
       next: r => {
         const it = r.item;
         const change = r.transaction.quantityChange;
-        let msg = `Recorded ${r.transaction.type.toLowerCase()} of ${change > 0 ? '+' : ''}${change}. ` +
+        // a sale or restock reads as a plain amount ("sale of 1"); only an adjustment is signed
+        const amount = r.transaction.type === 'Adjustment'
+          ? `${change > 0 ? '+' : ''}${change}`
+          : `${Math.abs(change)}`;
+        let msg = `Recorded ${r.transaction.type.toLowerCase()} of ${amount}. ` +
                   `${it.quantityOnHand} ${plural(it.unit, it.quantityOnHand)} now on hand.`;
         if (r.alert === 'raised') msg += ' Low-stock alert raised.';
         if (r.alert === 'resolved') msg += ' Low-stock alert cleared.';
