@@ -6,4 +6,5 @@ public class Supplier : RegisteredUser
     public string CompanyName { get; set; } = "";
     public string? Phone { get; set; }
     public string? DeliveryArea { get; set; }
+    public decimal ReliabilityScore { get; set; } = 0m;
 }

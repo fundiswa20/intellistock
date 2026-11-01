@@ -47,13 +47,28 @@ public class AuthController(InventoryRepository db, IConfiguration config) : Con
             SigningCredentials = new SigningCredentials(SigningKey(config), SecurityAlgorithms.HmacSha256),
         });
 
-        var businessName = user is BusinessOwner owner ? owner.BusinessName : null;
-        return Ok(new
-        {
-            token,
-            expiresAt = expires,
-            user = new { id = user.RegisteredUserId, user.FullName, user.Email, user.Role, businessName },
-        });
+        // var businessName = user is BusinessOwner owner ? owner.BusinessName : null;
+        // var companyName =  user is Supplier supplier ? supplier.CompanyName : null;
+        
+        string businessName = null;
+        if (user is BusinessOwner) {
+            businessName = ((BusinessOwner)user).BusinessName;
+
+        }
+
+        string companyName = null;
+        if(user is Supplier) {
+            companyName = ((Supplier)user).CompanyName;
+
+        }
+ 
+            return Ok(new
+            {
+                token,
+                expiresAt = expires,
+                user = new { id = user.RegisteredUserId, user.FullName, user.Email, user.Role, businessName, companyName },
+            });
+        
     }
 
     public static SymmetricSecurityKey SigningKey(IConfiguration config)

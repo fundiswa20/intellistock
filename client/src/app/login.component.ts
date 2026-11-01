@@ -58,7 +58,14 @@ export class LoginComponent {
     this.busy.set(true);
     this.error.set(null);
     this.auth.login(this.email.trim(), this.password).subscribe({
-      next: () => this.router.navigate(['/stock']),
+
+      next: res => {
+        if (res.user.role === 'Supplier') {
+        this.router.navigate(['/supplier/listings']);
+        } else {
+          this.router.navigate(['/stock']);
+        }
+      },
       error: err => { this.error.set(problemText(err)); this.busy.set(false); },
     });
   }
