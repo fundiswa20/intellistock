@@ -16,6 +16,16 @@ public static class SupplierScoring
         int quantityNeeded, int packSize, decimal packPrice, decimal deliveryCost)
         => PacksRequired(quantityNeeded, packSize) * packPrice + deliveryCost;
 
+    // Both are comma-separated place lists ("Section 3, Khayelitsha, Cape Town"); the
+    // supplier serves the owner when any place appears in both, ignoring case.
+    public static bool ServesArea(string? deliveryArea, string? ownerLocation)
+    {
+        static IEnumerable<string> Places(string? s) =>
+            (s ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        return Places(deliveryArea).Intersect(Places(ownerLocation), StringComparer.OrdinalIgnoreCase).Any();
+    }
+
     // Each factor is normalised to 0..1 against the best option, so the cheapest
     // scores exactly 1.0 on cost and one costing twice as much scores 0.5.
     public static decimal Score(

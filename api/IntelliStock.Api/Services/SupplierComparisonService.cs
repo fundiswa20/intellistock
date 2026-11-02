@@ -40,11 +40,7 @@ public class SupplierComparisonService(InventoryRepository db) : ISupplierCompar
             Packs = SupplierScoring.PacksRequired(quantity, x.Listing.PackSize),
             Cost  = SupplierScoring.TotalDeliveredCost(
                         quantity, x.Listing.PackSize, x.Listing.PackPrice, x.Listing.DeliveryCost),
-            ServesMyArea = !string.IsNullOrWhiteSpace(x.Supplier.DeliveryArea)
-                        && !string.IsNullOrWhiteSpace(owner.Location)
-                        && x.Supplier.DeliveryArea.Contains(
-                               owner.Location.Split(',')[0].Trim(),
-                               StringComparison.OrdinalIgnoreCase),
+            ServesMyArea = SupplierScoring.ServesArea(x.Supplier.DeliveryArea, owner.Location),
         }).ToList();
 
         var cheapest = priced.Min(p => p.Cost);

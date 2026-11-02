@@ -63,10 +63,14 @@ OWNERS = [
     (2, "Sipho's Tuck Shop", "Block L, Soshanguve, Pretoria", "012 555 0178"),
 ]
 SUPPLIERS = [
-    (3, "Ubuntu Wholesalers", "021 555 0190", "Khayelitsha, Mitchells Plain, Philippi"),
-    (4, "Kasi Cash & Carry", "021 555 0122", "Cape Flats"),
-    (5, "Mzansi Bulk Traders", "012 555 0145", "Tshwane North, Soshanguve"),
+    # id, company, phone, delivery area, reliability score
+    (3, "Ubuntu Wholesalers", "021 555 0190", "Khayelitsha, Mitchells Plain, Philippi", 0.94),
+    (4, "Kasi Cash & Carry", "021 555 0122", "Cape Flats", 0.87),
+    (5, "Mzansi Bulk Traders", "012 555 0145", "Tshwane North, Soshanguve", 0.78),
 ]
+# supplier id -> lead time (days), price markup, delivery cost range (rand)
+SUPPLIER_TERMS = {3: (1, 1.00, (0, 40)), 4: (2, 0.96, (50, 120)), 5: (3, 1.04, (20, 80))}
+BREAD_TRAY = 10   # suppliers sell bread by the tray, the shop counts it by the loaf
 
 # name, unit, base demand/day, unit cost, selling price, reorder level, pack size, supply
 #   supply: 'bakery' (daily delivery) or 'wholesale' (Mon/Thu trips)
@@ -297,7 +301,8 @@ def main():
                        datetime.combine(start - timedelta(days=7), time(10, 0)))
                       for uid, email, name, role in USERS])
     lines += inserts("BusinessOwner", ["RegisteredUserId", "BusinessName", "Location", "Phone"], OWNERS)
-    lines += inserts("Supplier", ["RegisteredUserId", "CompanyName", "Phone", "DeliveryArea"], SUPPLIERS)
+    lines += inserts("Supplier", ["RegisteredUserId", "CompanyName", "Phone", "DeliveryArea", "ReliabilityScore"],
+                     SUPPLIERS)
     lines += inserts("StockItem", ["StockItemId", "BusinessOwnerId", "Name", "Category", "Unit", "QuantityOnHand",
                                    "ReorderLevel", "UnitCost", "SellingPrice", "IsActive", "CreatedAt"],
                      [(it["id"], owner, it["name"], "Groceries", it["unit"], it["on_hand"], it["reorder"],
@@ -315,16 +320,20 @@ def main():
     seen = {}
     for _, it in all_items:
         seen.setdefault(it["name"], it)
-    for sid, lead, markup in ((3, 1, 1.00), (4, 2, 0.96), (5, 3, 1.04)):
+    for sid, (lead, markup, (min_delivery, max_delivery)) in SUPPLIER_TERMS.items():
         for name, it in seen.items():
-            if it["supply"] in ("bakery", "informal") or rng.random() < 0.15:
+            # every supplier carries bread (the demo item); braai wood is bought informally
+            if it["supply"] == "informal" or (it["supply"] != "bakery" and rng.random() < 0.15):
                 continue                       # not every supplier stocks everything
-            pack = max(it["pack"], 1)
+            pack = BREAD_TRAY if it["supply"] == "bakery" else max(it["pack"], 1)
             price = round(it["cost"] * pack * markup * rng.uniform(0.95, 1.05), 2)
-            listings.append((sid, name, "Groceries", pack, price, lead,
+            available = pack * rng.randint(5, 20)                 # units, not packs
+            delivery = 5 * rng.randint(min_delivery // 5, max_delivery // 5)
+            listings.append((sid, name, "Groceries", pack, price, lead, 1, available, delivery,
                              datetime.combine(end - timedelta(days=rng.randint(1, 20)), time(8, 0))))
     lines += inserts("SupplierListing", ["SupplierId", "ProductName", "Category", "PackSize", "PackPrice",
-                                         "LeadTimeDays", "UpdatedAt"], listings)
+                                         "LeadTimeDays", "IsActive", "AvailableQuantity", "DeliveryCost",
+                                         "UpdatedAt"], listings)
 
     with open(OUT, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(lines) + "\n")
