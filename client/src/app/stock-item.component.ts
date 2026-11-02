@@ -2,7 +2,7 @@ import { Component, Input, OnInit, inject, signal } from '@angular/core';
 import { DatePipe, DecimalPipe, PercentPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { InventoryApi, Movement, Prediction, StockItem, SupplierOption, plural, problemText } from './api';
+import { InventoryApi, Movement, Order, Prediction, StockItem, SupplierOption, plural, problemText } from './api';
 
 // One stock item: details, recent movements (FR-04), record a movement (FR-04),
 // and the reorder recommendation (FR-08) with which path produced it (ETR-03, D25)
@@ -103,6 +103,8 @@ import { InventoryApi, Movement, Prediction, StockItem, SupplierOption, plural, 
                           <div class="strong">{{ o.companyName }}
                             @if (o.isRecommended) { <span class="badge badge-model">Recommended</span> }</div>
                           <div class="muted small">{{ o.deliveryArea }}</div>
+                          <button class="btn btn-primary order-btn" type="button" (click)="placeOrder(o)"
+                                  [disabled]="ordering() || placedOrder() !== null">Order</button>
                         </td>
                         <td class="num strong nowrap">R {{ o.totalDeliveredCost.toFixed(2) }}</td>
                         <td class="num nowrap">{{ o.leadTimeDays }} {{ o.leadTimeDays === 1 ? 'day' : 'days' }}</td>
@@ -114,6 +116,11 @@ import { InventoryApi, Movement, Prediction, StockItem, SupplierOption, plural, 
                     }
                   </tbody>
                 </table>
+                @if (placedOrder(); as po) {
+                  <div class="ok order-msg">Order placed with {{ po.companyName }} — expected
+                    {{ po.expectedDeliveryAt ? (po.expectedDeliveryAt | date: 'EEE d MMM') : 'date to be confirmed' }}</div>
+                }
+                @if (orderError()) { <div class="error order-msg">{{ orderError() }}</div> }
               } @else {
                 <p class="muted pad empty-note">No suppliers currently list this product.</p>
               }
@@ -226,6 +233,8 @@ import { InventoryApi, Movement, Prediction, StockItem, SupplierOption, plural, 
     .recommended td { background: var(--brand-soft); }
     .breakdown td { padding-top: 0; font-size: 12.5px; color: var(--brand-dark); }
     .empty-note { margin: 0; padding-bottom: 18px; }
+    .order-btn { margin-top: 6px; padding: 4px 12px; font-size: 12.5px; }
+    .order-msg { margin: 12px 18px 18px; }
     @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
   `],
 })
@@ -244,6 +253,9 @@ export class StockItemComponent implements OnInit {
   comparedQty = signal(0);
   comparing = signal(false);
   compareError = signal<string | null>(null);
+  ordering = signal(false);
+  placedOrder = signal<Order | null>(null);
+  orderError = signal<string | null>(null);
 
   type = 'Sale';
   quantity: number | null = 1;
@@ -280,11 +292,25 @@ export class StockItemComponent implements OnInit {
   compare(quantity: number) {
     this.comparing.set(true);
     this.compareError.set(null);
+    this.placedOrder.set(null);
+    this.orderError.set(null);
     this.api.compareSuppliers(this.itemId, quantity).subscribe({
       next: options => {
         this.suppliers.set(options); this.comparedQty.set(quantity); this.comparing.set(false);
       },
       error: err => { this.compareError.set(problemText(err)); this.comparing.set(false); },
+    });
+  }
+
+  // FR-10: one order per comparison; the buttons stay disabled once it is placed
+  placeOrder(option: SupplierOption) {
+    this.ordering.set(true);
+    this.orderError.set(null);
+    this.api.placeOrder({
+      supplierListingId: option.supplierListingId, stockItemId: this.itemId, quantity: this.comparedQty(),
+    }).subscribe({
+      next: order => { this.placedOrder.set(order); this.ordering.set(false); },
+      error: err => { this.orderError.set(problemText(err)); this.ordering.set(false); },
     });
   }
 

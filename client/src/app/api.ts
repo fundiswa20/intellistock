@@ -70,6 +70,28 @@ export interface SupplierOption {
   scoreBreakdown: string;
 }
 
+// FR-10: an order against one supplier listing. companyName is the other party:
+// the supplier for the owner, the owner's business for the supplier.
+export type OrderStatus = 'Placed' | 'Confirmed' | 'Dispatched' | 'Delivered';
+
+export interface OrderLine {
+  orderLineId: number;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+export interface Order {
+  orderId: number;
+  companyName: string;
+  status: OrderStatus;
+  totalCost: number;
+  placedAt: string;
+  expectedDeliveryAt: string | null;
+  lines: OrderLine[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class InventoryApi {
   private http = inject(HttpClient);
@@ -85,6 +107,9 @@ export class InventoryApi {
   predict(id: number) { return this.http.post<Prediction>(`${API_URL}/api/stock/${id}/prediction`, null); }
   compareSuppliers(id: number, quantity: number) {
     return this.http.get<SupplierOption[]>(`${API_URL}/api/stock/${id}/suppliers?quantity=${quantity}`);
+  }
+  placeOrder(body: { supplierListingId: number; stockItemId: number; quantity: number }) {
+    return this.http.post<Order>(`${API_URL}/api/orders`, body);
   }
 }
 
@@ -112,6 +137,10 @@ export class SupplierApi {
   listings() { return this.http.get<Listing[]>(`${API_URL}/api/supplier/listings`); }
   createListing(body: ListingRequest) {
     return this.http.post<Listing>(`${API_URL}/api/supplier/listings`, body);
+  }
+  orders() { return this.http.get<Order[]>(`${API_URL}/api/supplier/orders`); }
+  updateOrderStatus(id: number, status: OrderStatus) {
+    return this.http.put<Order>(`${API_URL}/api/supplier/orders/${id}/status`, { status });
   }
 }
 

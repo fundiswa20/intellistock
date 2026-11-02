@@ -19,6 +19,7 @@ import { AuthService } from './auth';
         <nav>
           @if (user.role === 'Supplier') {
             <a routerLink="/supplier/listings" [class.active]="section() === 'listings'">My listings</a>
+            <a routerLink="/supplier/orders" [class.active]="section() === 'orders'">Orders</a>
           } @else {
             <a routerLink="/stock" [class.active]="section() === 'stock'">Stock</a>
             <a routerLink="/stock" fragment="needs-attention" [class.active]="section() === 'alerts'">Alerts</a>
@@ -69,6 +70,7 @@ export class InventoryDashboard {
   // "Alerts" is the needs-attention group on the stock list, so it shares /stock
   section = computed(() => {
     const url = this.url();
+    if (url.startsWith('/supplier/orders')) return 'orders';
     if (url.startsWith('/supplier')) return 'listings';
     if (url.includes('#needs-attention')) return 'alerts';
     return url.startsWith('/stock') ? 'stock' : null;
