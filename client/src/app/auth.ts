@@ -10,6 +10,7 @@ export interface SignedInUser {
   email: string;
   role: string;
   businessName: string | null;
+  companyName: string | null;
 }
 
 interface Session { token: string; expiresAt: string; user: SignedInUser; }
@@ -63,3 +64,10 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
 export const authGuard: CanActivateFn = () =>
   inject(AuthService).user() ? true : inject(Router).createUrlTree(['/login']);
+
+// supplier screens: anyone else signed in goes back to their stock
+export const supplierGuard: CanActivateFn = () => {
+  const user = inject(AuthService).user();
+  if (user?.role === 'Supplier') return true;
+  return inject(Router).createUrlTree([user ? '/stock' : '/login']);
+};

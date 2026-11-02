@@ -66,6 +66,33 @@ export class InventoryApi {
   predict(id: number) { return this.http.post<Prediction>(`${API_URL}/api/stock/${id}/prediction`, null); }
 }
 
+// FR-06: a supplier's own price list
+export interface ListingRequest {
+  productName: string;
+  category: string;
+  packSize: number;
+  packPrice: number;
+  availableQuantity: number;
+  leadTimeDays: number;
+  deliveryCost: number;
+}
+
+export interface Listing extends ListingRequest {
+  supplierListingId: number;
+  isActive: boolean;
+  updatedAt: string;
+}
+
+@Injectable({ providedIn: 'root' })
+export class SupplierApi {
+  private http = inject(HttpClient);
+
+  listings() { return this.http.get<Listing[]>(`${API_URL}/api/supplier/listings`); }
+  createListing(body: ListingRequest) {
+    return this.http.post<Listing>(`${API_URL}/api/supplier/listings`, body);
+  }
+}
+
 // "bag" -> "bags", "loaf" -> "loaves"; matches the API's alert messages
 export function plural(unit: string, n: number): string {
   if (Math.abs(n) === 1) return unit;

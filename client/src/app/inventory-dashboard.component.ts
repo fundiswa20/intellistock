@@ -10,12 +10,12 @@ import { AuthService } from './auth';
   template: `
     @if (auth.user(); as user) {
       <header class="topbar">
-        <a class="brand" routerLink="/stock">
+        <a class="brand" [routerLink]="user.role === 'Supplier' ? '/supplier/listings' : '/stock'">
           <span class="logo">IS</span>
           <span>IntelliStock</span>
         </a>
         <div class="who">
-          <div class="business">{{ user.businessName }}</div>
+          <div class="business">{{ user.businessName ?? user.companyName }}</div>
           <div class="person">{{ user.fullName }}</div>
         </div>
         <button class="btn btn-ghost" (click)="auth.logout()">Sign out</button>
