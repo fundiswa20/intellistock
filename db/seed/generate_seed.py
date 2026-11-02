@@ -327,7 +327,8 @@ def main():
                 continue                       # not every supplier stocks everything
             pack = BREAD_TRAY if it["supply"] == "bakery" else max(it["pack"], 1)
             price = round(it["cost"] * pack * markup * rng.uniform(0.95, 1.05), 2)
-            available = pack * rng.randint(5, 20)                 # units, not packs
+            # units, not packs; bakeries hold enough trays to cover a recommended bread order
+            available = pack * (rng.randint(30, 60) if it["supply"] == "bakery" else rng.randint(5, 20))
             delivery = 5 * rng.randint(min_delivery // 5, max_delivery // 5)
             listings.append((sid, name, "Groceries", pack, price, lead, 1, available, delivery,
                              datetime.combine(end - timedelta(days=rng.randint(1, 20)), time(8, 0))))
