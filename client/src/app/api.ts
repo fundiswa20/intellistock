@@ -51,6 +51,25 @@ export interface Prediction {
   createdAt: string;
 }
 
+// FR-07: one supplier's offer for restocking an item, ranked by the API
+export interface SupplierOption {
+  supplierListingId: number;
+  supplierId: number;
+  companyName: string;
+  deliveryArea: string;
+  packPrice: number;
+  packSize: number;
+  packsRequired: number;
+  deliveryCost: number;
+  totalDeliveredCost: number;
+  leadTimeDays: number;
+  reliabilityScore: number;
+  servesMyArea: boolean;
+  score: number;
+  isRecommended: boolean;
+  scoreBreakdown: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class InventoryApi {
   private http = inject(HttpClient);
@@ -64,6 +83,9 @@ export class InventoryApi {
     return this.http.post<MovementResult>(`${API_URL}/api/stock/${id}/movements`, body);
   }
   predict(id: number) { return this.http.post<Prediction>(`${API_URL}/api/stock/${id}/prediction`, null); }
+  compareSuppliers(id: number, quantity: number) {
+    return this.http.get<SupplierOption[]>(`${API_URL}/api/stock/${id}/suppliers?quantity=${quantity}`);
+  }
 }
 
 // FR-06: a supplier's own price list

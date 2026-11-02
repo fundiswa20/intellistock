@@ -1,15 +1,15 @@
 import { Component, Input, OnInit, inject, signal } from '@angular/core';
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { DatePipe, DecimalPipe, PercentPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { InventoryApi, Movement, Prediction, StockItem, plural, problemText } from './api';
+import { InventoryApi, Movement, Prediction, StockItem, SupplierOption, plural, problemText } from './api';
 
 // One stock item: details, recent movements (FR-04), record a movement (FR-04),
 // and the reorder recommendation (FR-08) with which path produced it (ETR-03, D25)
 @Component({
   selector: 'app-stock-item',
   standalone: true,
-  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, PercentPipe],
   template: `
     <a class="back" routerLink="/stock">← All stock</a>
 
@@ -75,8 +75,50 @@ import { InventoryApi, Movement, Prediction, StockItem, plural, problemText } fr
                 <dt>Model version</dt><dd>{{ p.modelVersion ?? 'not used' }}</dd>
               </dl>
               <p class="basis" [class.basis-fallback]="p.recommendationSource !== 'model'">{{ p.basis }}</p>
+              <div class="compare-row">
+                <button class="btn btn-primary" type="button" (click)="compare(p.recommendedQuantity)"
+                        [disabled]="comparing() || p.recommendedQuantity <= 0">
+                  {{ comparing() ? 'Comparing…' : 'Compare suppliers' }}
+                </button>
+                @if (p.recommendedQuantity <= 0) { <span class="muted small">Nothing to order right now.</span> }
+              </div>
             }
           </div>
+
+          <!-- FR-07: supplier options for the recommended quantity -->
+          @if (compareError()) { <div class="error">{{ compareError() }}</div> }
+          @if (suppliers(); as options) {
+            <div class="card table-card">
+              <h2 class="pad">Suppliers for {{ comparedQty() }} {{ plural(it.unit, comparedQty()) }}</h2>
+              @if (options.length) {
+                <table class="suppliers">
+                  <thead>
+                    <tr><th>Supplier · delivery area</th><th class="num">Delivered</th>
+                        <th class="num">Lead time</th><th class="num">Reliability</th></tr>
+                  </thead>
+                  <tbody>
+                    @for (o of options; track o.supplierListingId) {
+                      <tr [class.recommended]="o.isRecommended">
+                        <td>
+                          <div class="strong">{{ o.companyName }}
+                            @if (o.isRecommended) { <span class="badge badge-model">Recommended</span> }</div>
+                          <div class="muted small">{{ o.deliveryArea }}</div>
+                        </td>
+                        <td class="num strong nowrap">R {{ o.totalDeliveredCost.toFixed(2) }}</td>
+                        <td class="num nowrap">{{ o.leadTimeDays }} {{ o.leadTimeDays === 1 ? 'day' : 'days' }}</td>
+                        <td class="num">{{ o.reliabilityScore | percent }}</td>
+                      </tr>
+                      @if (o.isRecommended) {
+                        <tr class="recommended breakdown"><td colspan="4">{{ o.scoreBreakdown }}</td></tr>
+                      }
+                    }
+                  </tbody>
+                </table>
+              } @else {
+                <p class="muted pad empty-note">No suppliers currently list this product.</p>
+              }
+            </div>
+          }
         </div>
 
         <!-- right column: record a movement, then the log -->
@@ -174,6 +216,14 @@ import { InventoryApi, Movement, Prediction, StockItem, plural, problemText } fr
     .type-sale { background: #eef1f5; color: #3d4a5c; }
     .type-restock { background: var(--brand-soft); color: var(--brand-dark); }
     .type-adjustment { background: var(--amber-soft); color: #7a4b00; }
+    .compare-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+    .suppliers th, .suppliers td { padding: 10px 12px; font-size: 13.5px; }
+    .suppliers th { white-space: nowrap; font-size: 11px; }
+    .suppliers .small { font-size: 12px; }
+    .suppliers .badge { margin-left: 6px; font-size: 11px; padding: 2px 8px; }
+    .recommended td { background: var(--brand-soft); }
+    .breakdown td { padding-top: 0; font-size: 12.5px; color: var(--brand-dark); }
+    .empty-note { margin: 0; padding-bottom: 18px; }
     @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
   `],
 })
@@ -187,6 +237,11 @@ export class StockItemComponent implements OnInit {
   prediction = signal<Prediction | null>(null);
   predicting = signal(false);
   error = signal<string | null>(null);
+
+  suppliers = signal<SupplierOption[] | null>(null);
+  comparedQty = signal(0);
+  comparing = signal(false);
+  compareError = signal<string | null>(null);
 
   type = 'Sale';
   quantity: number | null = 1;
@@ -214,8 +269,20 @@ export class StockItemComponent implements OnInit {
   predict() {
     this.predicting.set(true);
     this.api.predict(this.itemId).subscribe({
-      next: p => { this.prediction.set(p); this.predicting.set(false); },
+      // a new recommendation means a new quantity, so an earlier comparison no longer applies
+      next: p => { this.prediction.set(p); this.predicting.set(false); this.suppliers.set(null); },
       error: err => { this.error.set(problemText(err)); this.predicting.set(false); },
+    });
+  }
+
+  compare(quantity: number) {
+    this.comparing.set(true);
+    this.compareError.set(null);
+    this.api.compareSuppliers(this.itemId, quantity).subscribe({
+      next: options => {
+        this.suppliers.set(options); this.comparedQty.set(quantity); this.comparing.set(false);
+      },
+      error: err => { this.compareError.set(problemText(err)); this.comparing.set(false); },
     });
   }
 
