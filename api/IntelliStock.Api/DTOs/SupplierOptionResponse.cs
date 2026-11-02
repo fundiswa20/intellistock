@@ -5,7 +5,6 @@ public record  SupplierOptionResponse
     public int SupplierListingId {get; init;}
     public int SupplierId{get; init;}
     public string CompanyName {get; init;} ="";
-
     public string DeliveryArea {get;init;} ="";
     public decimal PackPrice{get; init;}
     public int PackSize{get;init;}

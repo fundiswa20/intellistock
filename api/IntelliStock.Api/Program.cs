@@ -31,6 +31,8 @@ builder.Services.AddHttpClient(StockController.ModelClient, c =>
 });
 
 builder.Services.AddScoped<ISupplierService, SupplierService>();
+builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<ISupplierComparisonService, SupplierComparisonService>();
 
 // FR-02: JWT bearer tokens issued by AuthController
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

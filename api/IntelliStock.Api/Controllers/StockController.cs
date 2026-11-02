@@ -5,6 +5,7 @@ using System.Text.Json;
 using IntelliStock.Api.Data;
 using IntelliStock.Api.Domain;
 using IntelliStock.Api.Models;
+using IntelliStock.Api.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -31,7 +32,7 @@ public record MovementRequest(
 [ApiController]
 [Route("api/stock")]
 [Authorize(Roles = "BusinessOwner")]
-public class StockController(InventoryRepository db, IHttpClientFactory http, ILogger<StockController> log)
+public class StockController(InventoryRepository db, IHttpClientFactory http, ISupplierComparisonService comparison,ILogger<StockController> log)
     : ControllerBase
 {
     public const string ModelClient = "ReorderPredictionService";
@@ -251,6 +252,18 @@ public class StockController(InventoryRepository db, IHttpClientFactory http, IL
             .OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.ReorderPredictionId)
             .FirstOrDefaultAsync();
         return p is null ? NotFound() : Ok(PredictionView(p, item, null));
+    }
+
+    // FR-07: ranked supplier options for restocking this item
+    [HttpGet("{id:int}/suppliers")]
+    public async Task<IActionResult> CompareSuppliers(
+        int id, [FromQuery] int quantity, [FromServices] ISupplierComparisonService comparison)
+    {
+        if (quantity <= 0) return BadRequest(new ProblemDetails {
+            Title = "Quantity must be a positive number.", Status = 400 });
+
+        var options = await comparison.CompareAsync(OwnerId, id, quantity);
+        return Ok(options);
     }
 
     // ------------------------------------------------------------------ helpers
