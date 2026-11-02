@@ -217,8 +217,10 @@ import { InventoryApi, Movement, Prediction, StockItem, SupplierOption, plural, 
     .type-restock { background: var(--brand-soft); color: var(--brand-dark); }
     .type-adjustment { background: var(--amber-soft); color: #7a4b00; }
     .compare-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
-    .suppliers th, .suppliers td { padding: 10px 12px; font-size: 13.5px; }
-    .suppliers th { white-space: nowrap; font-size: 11px; }
+    .suppliers th, .suppliers td { padding: 10px 8px; font-size: 13.5px; }
+    .suppliers th:first-child, .suppliers td:first-child { padding-left: 18px; }
+    .suppliers th:last-child, .suppliers td:last-child { padding-right: 18px; }
+    .suppliers th { font-size: 11px; vertical-align: bottom; }
     .suppliers .small { font-size: 12px; }
     .suppliers .badge { margin-left: 6px; font-size: 11px; padding: 2px 8px; }
     .recommended td { background: var(--brand-soft); }
