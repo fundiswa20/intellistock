@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
-import { InventoryApi, StockItem, plural, problemText } from '../api';
+import { ActivatedRoute, Router } from '@angular/router';
+import { CATEGORIES, InventoryApi, StockItem, plural, problemText } from '../api';
 import { EmptyStateComponent } from '../shared/empty-state.component';
 import { IconComponent } from '../shared/icon.component';
 import { MoneyPipe } from '../shared/money.pipe';
@@ -38,6 +38,7 @@ import { MoneyPipe } from '../shared/money.pipe';
             <button [class.active]="!lowOnly()" (click)="lowOnly.set(false)">All<span class="count">{{ items().length }}</span></button>
             <button [class.active]="lowOnly()" (click)="lowOnly.set(true)">Low stock<span class="count">{{ lowCount() }}</span></button>
           </div>
+          <button type="button" class="btn btn-primary add" (click)="startNew('')"><app-icon name="plus" [size]="16" /> Add product</button>
         </div>
 
         @if (shown().length) {
@@ -84,8 +85,66 @@ import { MoneyPipe } from '../shared/money.pipe';
           </app-empty-state>
         } @else {
           <app-empty-state icon="stock" title="No products yet"
-                           text="Products added to your shop appear here with their stock on hand and reorder level." />
+                           text="Products added to your shop appear here with their stock on hand and reorder level.">
+            <button type="button" class="btn btn-primary btn-sm" (click)="startNew('')"><app-icon name="plus" [size]="14" /> Add product</button>
+          </app-empty-state>
         }
+      </div>
+    }
+
+    <!-- FR-03 create. Opened with ?new=<product name>&order=<id> from an order that has no item to book into -->
+    @if (creating()) {
+      <div class="modal-backdrop" (click)="creating.set(false)">
+        <form class="modal" (click)="$event.stopPropagation()" (ngSubmit)="create()" #f="ngForm" role="dialog" aria-labelledby="new-title">
+          <div class="modal-head">
+            <div>
+              <h2 id="new-title">Add product</h2>
+              @if (forOrder) { <p class="muted small">Then you can book order #{{ forOrder }} into it.</p> }
+            </div>
+            <button type="button" class="icon-btn" (click)="creating.set(false)" aria-label="Close"><app-icon name="x" /></button>
+          </div>
+          <div class="modal-body">
+            <div class="form-grid">
+              <div class="field span-2">
+                <label for="name">Product name</label>
+                <input class="input" id="name" name="name" [(ngModel)]="form.name" required minlength="2" maxlength="120" />
+              </div>
+              <div class="field">
+                <label for="category">Category</label>
+                <select class="input" id="category" name="category" [(ngModel)]="form.category">
+                  @for (c of categories; track c) { <option [value]="c">{{ c }}</option> }
+                </select>
+              </div>
+              <div class="field">
+                <label for="unit">Sold per</label>
+                <input class="input" id="unit" name="unit" [(ngModel)]="form.unit" required maxlength="30" placeholder="e.g. each, carton, loaf" />
+              </div>
+              <div class="field">
+                <label for="reorderLevel">Reorder level</label>
+                <input class="input" id="reorderLevel" name="reorderLevel" type="number" min="0" [(ngModel)]="form.reorderLevel" required />
+                <span class="hint">An alert is raised at or below this.</span>
+              </div>
+              <div class="field">
+                <label for="openingQuantity">On hand now</label>
+                <input class="input" id="openingQuantity" name="openingQuantity" type="number" min="0" [(ngModel)]="form.openingQuantity" required />
+                <span class="hint">Before this delivery.</span>
+              </div>
+              <div class="field">
+                <label for="unitCost">Unit cost (R)</label>
+                <input class="input" id="unitCost" name="unitCost" type="number" min="0" step="0.01" [(ngModel)]="form.unitCost" required />
+              </div>
+              <div class="field">
+                <label for="sellingPrice">Selling price (R)</label>
+                <input class="input" id="sellingPrice" name="sellingPrice" type="number" min="0" step="0.01" [(ngModel)]="form.sellingPrice" required />
+              </div>
+            </div>
+            @if (formError()) { <div class="notice notice-error" style="margin:0">{{ formError() }}</div> }
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-secondary" (click)="creating.set(false)">Cancel</button>
+            <button type="submit" class="btn btn-primary" [disabled]="saving() || !f.valid">{{ saving() ? 'Saving…' : 'Add product' }}</button>
+          </div>
+        </form>
       </div>
     }
   `,
@@ -93,12 +152,21 @@ import { MoneyPipe } from '../shared/money.pipe';
     .low-count { color: var(--red-600); font-weight: 600; }
     .toolbar { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3);
                flex-wrap: wrap; padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--gray-100); }
+    .add { margin-left: auto; }
     .chevron { color: var(--gray-400); width: 40px; }
   `],
 })
 export class StockListComponent implements OnInit {
   private api = inject(InventoryApi);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  categories = CATEGORIES;
+
+  creating = signal(false);
+  saving = signal(false);
+  formError = signal<string | null>(null);
+  forOrder: number | null = null;
+  form = { name: '', category: 'Groceries', unit: 'each', reorderLevel: 5, openingQuantity: 0, unitCost: 0, sellingPrice: 0 };
 
   items = signal<StockItem[]>([]);
   loading = signal(true);
@@ -113,9 +181,34 @@ export class StockListComponent implements OnInit {
   plural = plural;
 
   ngOnInit() {
+    const p = this.route.snapshot.queryParamMap;
+    if (p.has('new')) {
+      this.forOrder = p.get('order') ? Number(p.get('order')) : null;
+      this.startNew(p.get('new') ?? '');
+    }
     this.api.stock().subscribe({
       next: items => { this.items.set(items); this.loading.set(false); },
       error: err => { this.error.set(problemText(err)); this.loading.set(false); },
+    });
+  }
+
+  startNew(name: string) {
+    this.form = { name, category: 'Groceries', unit: 'each', reorderLevel: 5, openingQuantity: 0, unitCost: 0, sellingPrice: 0 };
+    this.formError.set(null);
+    this.creating.set(true);
+  }
+
+  // back to the order it was created for, otherwise to the new item
+  create() {
+    this.saving.set(true);
+    this.formError.set(null);
+    const f = this.form;
+    this.api.createItem({
+      name: f.name.trim(), category: f.category, unit: f.unit.trim(), reorderLevel: Number(f.reorderLevel),
+      unitCost: Number(f.unitCost), sellingPrice: Number(f.sellingPrice), openingQuantity: Number(f.openingQuantity),
+    }).subscribe({
+      next: item => this.router.navigate(this.forOrder ? ['/orders', this.forOrder] : ['/stock', item.stockItemId]),
+      error: err => { this.formError.set(problemText(err)); this.saving.set(false); },
     });
   }
 

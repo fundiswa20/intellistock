@@ -71,6 +71,11 @@ import { MoneyPipe } from '../shared/money.pipe';
                 }
               </tbody>
             </table>
+          } @else if (!items().length) {
+            <app-empty-state compact icon="stock" title="No products yet"
+                             text="Add the products you sell to track stock, get low-stock alerts and reorder advice.">
+              <a class="btn btn-primary btn-sm" routerLink="/stock" [queryParams]="{ new: '' }">Add product</a>
+            </app-empty-state>
           } @else {
             <app-empty-state compact icon="checkCircle" tone="ok" title="Nothing is running low"
                              text="Every product is above its reorder level. Alerts appear here as soon as one drops.">

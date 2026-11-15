@@ -508,6 +508,22 @@ because the supplier interface uses them.
 - *Sent inline, not queued:* a send waits for SMTP (5-second timeout) before the API answers.
   Fine at this scale; a queue with retries would be the next step for a real provider.
 
+**D41 — A new owner can add products, and every delivery has somewhere to go.** _(Sun 15 Nov, FR-03)_
+- *Add product:* the Stock page had no way to create an item, so a newly registered owner was
+  stuck at "No products yet". An "Add product" button now sits beside the search and filters
+  and in the empty state. It posts to the existing `POST /api/stock`, which records the opening
+  quantity as an Adjustment in the log (FR-04). `/stock?new=<name>&order=<id>` opens it
+  prefilled and returns to that order after saving.
+- *Empty states for a new account:* Dashboard and Alerts said "every product is above its
+  reorder level" when there were no products; they now say there are none and offer Add
+  product. Suppliers, Orders and the supplier's Listings already offered an action or said why
+  the page was empty.
+- *Receiving a delivery (order detail):* an order placed from a stock item already carries its
+  `StockItemId`, so the panel names that item and shows only the Receive button. Otherwise the
+  dropdown lists the owner's items whose names match the product (same rule as D39, one match
+  preselected). With no match it lists every item, with a note that none match by name. With
+  no items at all it explains that one is needed and links to Add product.
+
 ---
 
 ## 2a. Known limitations (for Assignment 3 Q5.4 and Assignment 4 Q4.3)

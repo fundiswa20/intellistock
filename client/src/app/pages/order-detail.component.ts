@@ -2,7 +2,7 @@ import { Component, Input, OnInit, computed, inject, signal } from '@angular/cor
 import { DatePipe, PercentPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { InventoryApi, Order, OrderStatus, StockItem, orderTone, problemText } from '../api';
+import { InventoryApi, Order, OrderStatus, StockItem, orderTone, problemText, sameProduct } from '../api';
 import { AuthService } from '../auth';
 import { IconComponent } from '../shared/icon.component';
 import { MoneyPipe } from '../shared/money.pipe';
@@ -53,15 +53,35 @@ const ACTION_LABEL: Partial<Record<OrderStatus, string>> = {
         <section class="card receive">
           <div class="receive-text">
             <h2>Delivered — book it into stock</h2>
-            <p class="secondary">Adds {{ o.units }} units to the item as one restock, with this order's number in the note.</p>
+            @if (linkedItem(); as it) {
+              <!-- ordered from the item's page: it already knows where the units go -->
+              <p class="secondary">Adds {{ o.units }} units to <a [routerLink]="['/stock', it.stockItemId]">{{ it.name }}</a>
+                as one restock, with this order's number in the note.</p>
+            } @else if (itemsLoaded() && !items().length) {
+              <p class="secondary">You need a stock item to book these {{ o.units }} units into, and you have none yet.
+                Create one for {{ o.productName }}, then come back to this order.</p>
+            } @else {
+              <p class="secondary">Adds {{ o.units }} units to the item you choose as one restock, with this order's number in the note.</p>
+              @if (itemsLoaded() && !matches().length) {
+                <p class="no-match">None of your items match “{{ o.productName }}” by name, so all your items are listed.
+                  Check you pick the right one, or <a [routerLink]="['/stock']" [queryParams]="createParams(o)">add a new product</a>.</p>
+              }
+            }
           </div>
-          <div class="receive-form">
-            <select class="input" [(ngModel)]="receiveItem" aria-label="Stock item">
-              <option [ngValue]="null">Choose a stock item</option>
-              @for (i of items(); track i.stockItemId) { <option [ngValue]="i.stockItemId">{{ i.name }}</option> }
-            </select>
-            <button class="btn btn-primary" [disabled]="busy() || !receiveItem" (click)="receive(o)">Receive into stock</button>
-          </div>
+          @if (linkedItem()) {
+            <button class="btn btn-primary" [disabled]="busy()" (click)="receive(o)">Receive into stock</button>
+          } @else if (itemsLoaded() && !items().length) {
+            <a class="btn btn-primary" [routerLink]="['/stock']" [queryParams]="createParams(o)">
+              <app-icon name="plus" [size]="16" /> Add a product</a>
+          } @else {
+            <div class="receive-form">
+              <select class="input" [(ngModel)]="receiveItem" aria-label="Stock item">
+                <option [ngValue]="null">Choose a stock item</option>
+                @for (i of choices(); track i.stockItemId) { <option [ngValue]="i.stockItemId">{{ i.name }}</option> }
+              </select>
+              <button class="btn btn-primary" [disabled]="busy() || !receiveItem" (click)="receive(o)">Receive into stock</button>
+            </div>
+          }
         </section>
       }
 
@@ -153,7 +173,8 @@ const ACTION_LABEL: Partial<Record<OrderStatus, string>> = {
 
     .receive { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); flex-wrap: wrap;
                margin-bottom: var(--space-5); box-shadow: var(--shadow), inset 3px 0 0 var(--amber-500); }
-    .receive-text { display: grid; gap: var(--space-1); }
+    .receive-text { display: grid; gap: var(--space-1); max-width: 560px; }
+    .no-match { font-size: var(--text-sm); color: var(--amber-700); }
     .receive-form { display: flex; gap: var(--space-2); flex-wrap: wrap; }
     .receive-form select { width: 260px; }
 
@@ -185,7 +206,18 @@ export class OrderDetailComponent implements OnInit {
   message = signal<string | null>(null);
   busy = signal(false);
   receiveItem: number | null = null;
+  itemsLoaded = signal(false);
   tone = orderTone;
+
+  // where a delivery goes: the item it was ordered from, otherwise the owner's choice from the
+  // items whose name matches the product - or every item when none does
+  linkedItem = computed(() => {
+    const id = this.order()?.stockItemId;
+    return id ? this.items().find(i => i.stockItemId === id) ?? null : null;
+  });
+  matches = computed(() => this.items().filter(i => sameProduct(i.name, this.order()?.productName ?? '')));
+  choices = computed(() => (this.matches().length ? this.matches() : this.items()));
+  createParams = (o: Order) => ({ new: o.productName, order: o.purchaseOrderId });
 
   steps = computed<Step[]>(() => {
     const o = this.order();
@@ -207,10 +239,18 @@ export class OrderDetailComponent implements OnInit {
     if (this.route.snapshot.queryParamMap.get('placed')) this.message.set('Order placed. It is waiting for the supplier to confirm.');
     const id = Number(this.id);
     (this.owner ? this.api.order(id) : this.api.supplierOrder(id)).subscribe({
-      next: o => { this.order.set(o); this.receiveItem = o.stockItemId; },
+      next: o => { this.order.set(o); this.receiveItem = o.stockItemId; this.preselect(); },
       error: err => this.error.set(err.status === 404 ? 'This order does not exist.' : problemText(err)),
     });
-    if (this.owner) this.api.stock().subscribe({ next: i => this.items.set(i) });
+    if (this.owner) this.api.stock().subscribe({
+      next: i => { this.items.set(i); this.itemsLoaded.set(true); this.preselect(); },
+      error: () => this.itemsLoaded.set(true),
+    });
+  }
+
+  // one matching item is chosen for the owner
+  private preselect() {
+    if (this.receiveItem == null && this.matches().length === 1) this.receiveItem = this.matches()[0].stockItemId;
   }
 
   actionLabel(s: OrderStatus) { return ACTION_LABEL[s] ?? s; }

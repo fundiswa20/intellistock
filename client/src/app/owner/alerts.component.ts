@@ -49,6 +49,11 @@ import { EmptyStateComponent } from '../shared/empty-state.component';
                 </tbody>
               </table>
             </div>
+          } @else if (!productCount()) {
+            <app-empty-state icon="stock" title="No products to watch yet"
+                             text="Alerts are raised when a product drops to its reorder level. Add your products first.">
+              <a class="btn btn-primary btn-sm" routerLink="/stock" [queryParams]="{ new: '' }">Add product</a>
+            </app-empty-state>
           } @else {
             <app-empty-state icon="checkCircle" tone="ok" title="No open alerts"
                              text="Every product is above its reorder level. You'll see an alert here the moment one drops.">
@@ -93,11 +98,14 @@ export class AlertsComponent implements OnInit {
   resolved = signal<Alert[]>([]);
   loading = signal(true);
   error = signal<string | null>(null);
+  productCount = signal(0);
   plural = plural;
 
   ngOnInit() {
-    forkJoin({ open: this.api.alerts('open'), resolved: this.api.alerts('resolved') }).subscribe({
-      next: r => { this.open.set(r.open); this.resolved.set(r.resolved); this.loading.set(false); },
+    forkJoin({ open: this.api.alerts('open'), resolved: this.api.alerts('resolved'), stock: this.api.stock() }).subscribe({
+      next: r => {
+        this.open.set(r.open); this.resolved.set(r.resolved); this.productCount.set(r.stock.length); this.loading.set(false);
+      },
       error: err => { this.error.set(problemText(err)); this.loading.set(false); },
     });
   }

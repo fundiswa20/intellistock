@@ -197,6 +197,10 @@ export class InventoryApi {
   // ---- owner: stock (FR-03, FR-04, FR-05, FR-08)
   stock() { return this.http.get<StockItem[]>(`${API_URL}/api/stock`); }
   item(id: number) { return this.http.get<StockItem>(`${API_URL}/api/stock/${id}`); }
+  createItem(body: { name: string; category: string; unit: string; reorderLevel: number; unitCost: number;
+                     sellingPrice: number; openingQuantity: number }) {
+    return this.http.post<StockItem>(`${API_URL}/api/stock`, body);
+  }
   movements(id: number, limit = 15) {
     return this.http.get<Movement[]>(`${API_URL}/api/stock/${id}/movements?limit=${limit}`);
   }
@@ -273,6 +277,26 @@ export function matchesSearch(query: string, ...texts: string[]): boolean {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const hay = texts.join(' ').toLowerCase();
   return words.every(w => hay.includes(w));
+}
+
+// The same product, by name, as the API's ProductMatch (D39): one name contains the other, or
+// a word starts with the product word - the last word before the first size or count
+// ("Clover Long Life Milk 1L" -> "milk"). Case-insensitive, either way round.
+export function productKeyTerm(name: string): string {
+  const words = name.match(/[\p{L}\p{N}'’-]+/gu) ?? [];
+  const before: string[] = [];
+  for (const w of words) { if (/\d/.test(w)) break; before.push(w); }
+  return (before[before.length - 1] ?? words.find(w => !/\d/.test(w)) ?? name.trim()).toLowerCase();
+}
+
+export function sameProduct(a: string, b: string): boolean {
+  const one = (item: string, other: string) => {
+    if (other.toLowerCase().includes(item.trim().toLowerCase())) return true;
+    let term = productKeyTerm(item);
+    if (term.length > 3 && term.endsWith('s')) term = term.slice(0, -1);
+    return term.length >= 3 && (other.match(/[\p{L}\p{N}'’-]+/gu) ?? []).some(w => w.toLowerCase().startsWith(term));
+  };
+  return one(a, b) || one(b, a);
 }
 
 export function isOpenOrder(o: Order) { return o.status === 'Placed' || o.status === 'Confirmed' || o.status === 'Dispatched'; }
