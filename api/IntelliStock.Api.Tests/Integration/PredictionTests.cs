@@ -10,7 +10,20 @@ namespace IntelliStock.Api.Tests.Integration;
 public class PredictionTests(ApiFactory api) : IDisposable
 {
     private const int MaizeMeal = 3;       // seeded, 120 days of history
-    private const int NewSpaghetti = 22;   // seeded, added 14 Sep - under 30 days
+
+    // A new item added 10 days ago, so it has 9 full days of history (the day it was added is a
+    // partial day) whatever today's date is. The seeded new item (Spaghetti, added 14 Sep) only
+    // stays under 30 days until mid-October, so it cannot be used here.
+    private async Task<int> NewItemAddedTenDaysAgo()
+    {
+        var client = await api.LoginAs("nomvula@intellistock.test");
+        var item = await (await client.PostAsJsonAsync("/api/stock", StockItemTests.NewItem("Test New Item 422", 20, 3)))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        var id = item.GetProperty("stockItemId").GetInt32();
+        await ApiFactory.ExecSql(
+            $"UPDATE StockItem SET CreatedAt = DATE_SUB(UTC_TIMESTAMP() + INTERVAL 2 HOUR, INTERVAL 10 DAY) WHERE StockItemId = {id}");
+        return id;
+    }
 
     public void Dispose() => api.Model.Reset();
 
@@ -89,12 +102,12 @@ public class PredictionTests(ApiFactory api) : IDisposable
     {
         api.Model.Respond = _ => StubModelService.Json(HttpStatusCode.UnprocessableEntity, new { error = "insufficientHistory" });
 
-        var p = await Predict(NewSpaghetti);
+        var p = await Predict(await NewItemAddedTenDaysAgo());
 
         Assert.True(p.GetProperty("usedFallback").GetBoolean());
         Assert.Equal("insufficientHistory", p.GetProperty("fallbackReason").GetString());
         Assert.Equal("thresholdBasedAdvice", p.GetProperty("recommendationSource").GetString());
-        Assert.True(p.GetProperty("historyDays").GetInt32() < 30);
+        Assert.Equal(9, p.GetProperty("historyDays").GetInt32());
         Assert.Equal(JsonValueKind.Null, p.GetProperty("modelVersion").ValueKind);
     }
 

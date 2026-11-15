@@ -42,13 +42,14 @@ and tested in the API but has no client screen yet (the minimal client is Tue 29
 
 **Open issues**
 
-**O6 — `PredictionTests.Model_422_insufficient_history_falls_back_for_a_new_item` depends on today's date.**
-It expects Fatti's & Moni's Spaghetti (added 14 Sep) to have under 30 days of history. The API
-measures history up to the real date, so from 14 Oct the item has a full 60 days and the
-assertion `historyDays < 30` fails. On 15 Nov it fails for this reason only; 106 of 107 tests
-pass. The same cause makes live forecasts near zero, because the seed's sales end on 29 Sep.
-*To close:* either regenerate the seed so it ends yesterday (`generate_seed.py --end`), or
-have the test create its own new item instead of relying on the seeded one.
+**O7 — Live forecasts are near zero because the seed's sales end on 29 Sep.** The API measures
+history up to today, so on 15 Nov the last 30+ days have no sales and most items show 0 demand
+and "Not needed". *To close:* regenerate the seed to end the day before a demo
+(`generate_seed.py --end <yesterday>`), then `docker compose down -v` and up again.
+
+_O6 (date-dependent 422 test) — closed 15 Nov: the test now creates its own item backdated 10
+days and expects exactly 9 days of history, instead of relying on the seeded Spaghetti, which
+was only under 30 days old until mid-October. 107/107 pass._
 
 _O5 (15 Nov changes not run) — closed 15 Nov: reseeded, 106/107 tests pass (the one failure is
 O6), both workflows checked by hand._
@@ -647,6 +648,8 @@ MAPE 10.51% vs 22.18% baseline (`86de1ea`).
   confirmed → dispatched → delivered #10, edited a listing to 3 packs and saw it under
   "Running low", Settings with reliability, and `/orders` got the not-authorised page.
 - Fixed from the hand check: "—days" when there is no forecast, and the order-placed message.
+- O6 fixed: the 422 fallback test no longer depends on today's date; 107/107 pass. The stale
+  seed dates behind near-zero live forecasts are recorded separately as O7.
 - Not checked: screenshots (the app window was hidden, so the pages were checked through their
   text and structure, not visually), and the phone-width layout.
 
