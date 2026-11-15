@@ -1,143 +1,148 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { PercentPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
-import { InventoryApi, Listing, StockItem, matchesSearch, problemText } from '../api';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { InventoryApi, REACH_LABEL, REACH_TONE, Reach, SupplierSummary, matchesSearch, problemText } from '../api';
 import { EmptyStateComponent } from '../shared/empty-state.component';
 import { IconComponent } from '../shared/icon.component';
-import { MoneyPipe } from '../shared/money.pipe';
-import { OrderDialogComponent } from '../shared/order-dialog.component';
 
-// FR-06: every supplier's active listings, cheapest per unit first, and placing an order (FR-10).
-// Opened from a stock item as /suppliers?q=<name>&item=<id>&qty=<recommended units>.
+const GROUPS: { reach: Reach; title: string; text: string }[] = [
+  { reach: 'inArea', title: 'In your area', text: 'They name your area in where they deliver.' },
+  { reach: 'nearby', title: 'Nearby areas', text: 'They deliver elsewhere in your province. Check they come to you.' },
+  { reach: 'unknown', title: 'Delivery area not confirmed', text: "We can't tell from their delivery area whether they reach you." },
+];
+
+// FR-06 / D42: the registered suppliers who can plausibly deliver to the owner, as cards.
+// Suppliers serving only other provinces are left out by the API. Opening one shows its listings.
 @Component({
   selector: 'app-suppliers',
   standalone: true,
-  imports: [FormsModule, PercentPipe, MoneyPipe, EmptyStateComponent, IconComponent, OrderDialogComponent],
+  imports: [FormsModule, RouterLink, PercentPipe, EmptyStateComponent, IconComponent],
   template: `
     <div class="page-head">
       <div>
         <h1>Suppliers</h1>
-        <p class="subtitle">Compare listings from every supplier and order whole packs.</p>
+        <p class="subtitle">Suppliers who deliver to your area or nearby. Open one to see their price list and order.</p>
       </div>
     </div>
 
     @if (error()) { <div class="notice notice-error">{{ error() }}</div> }
 
-    <div class="card card-flush">
+    @if (loading()) {
+      <div class="card loading">Loading suppliers…</div>
+    } @else if (suppliers().length) {
       <div class="toolbar">
         <div class="search">
           <app-icon name="search" [size]="16" />
-          <input class="input" type="search" placeholder="Search products or suppliers" [ngModel]="query()"
-                 (ngModelChange)="query.set($event)" aria-label="Search listings" />
+          <input class="input" type="search" placeholder="Search suppliers or products, e.g. milk" [ngModel]="query()"
+                 (ngModelChange)="query.set($event)" aria-label="Search suppliers or products" />
         </div>
-        <span class="muted small">{{ shown().length }} {{ shown().length === 1 ? 'listing' : 'listings' }} from {{ supplierCount() }} {{ supplierCount() === 1 ? 'supplier' : 'suppliers' }}</span>
+        <span class="muted small">{{ shownCount() }} of {{ suppliers().length }} {{ suppliers().length === 1 ? 'supplier' : 'suppliers' }}</span>
       </div>
 
-      @if (loading()) {
-        <div class="loading">Loading listings…</div>
-      } @else if (shown().length) {
-        <div class="table-wrap">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Product</th><th>Supplier</th><th class="num">Pack</th><th class="num">Pack price</th>
-                <th class="num">Per unit</th><th class="num">Delivery</th><th class="num">Lead time</th><th class="num">Available</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (l of shown(); track l.supplierListingId) {
-                <tr>
-                  <td><div class="cell-title">{{ l.productName }}</div><div class="cell-sub">{{ l.category }}</div></td>
-                  <td>
-                    <div class="strong">{{ l.supplierName }}</div>
-                    <div class="cell-sub">{{ l.reliabilityScore | percent }} on time · {{ l.deliveryArea || 'Area not given' }}</div>
-                    <span class="pill area" [class.pill-success]="l.inYourArea" [class.pill-accent]="!l.inYourArea">
-                      {{ l.inYourArea ? 'In your area' : 'Outside your area' }}</span>
-                  </td>
-                  <td class="num secondary">{{ l.packSize }}</td>
-                  <td class="num">{{ l.packPrice | money }}</td>
-                  <td class="num"><span class="qty">{{ l.unitPrice | money }}</span>
-                    @if (cheapest().has(l.supplierListingId)) { <div><span class="pill pill-success pill-plain best">Best price</span></div> }</td>
-                  <td class="num secondary">{{ l.deliveryCost | money }}</td>
-                  <td class="num secondary nowrap">{{ l.leadTimeDays }} {{ l.leadTimeDays === 1 ? 'day' : 'days' }}</td>
-                  <td class="num">
-                    @if (l.availableQuantity > 0) { <span class="tabular">{{ l.availableQuantity }}</span> <span class="cell-sub">packs</span> }
-                    @else { <span class="pill pill-danger">Out of stock</span> }
-                  </td>
-                  <td class="num"><button class="btn btn-primary btn-sm" [disabled]="l.availableQuantity === 0" (click)="startOrder(l)">Order</button></td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      } @else if (listings().length) {
-        <app-empty-state icon="search" title="No listings match"
-                         [text]="'No supplier lists anything matching “' + query() + '”.'">
-          <button class="btn btn-secondary btn-sm" (click)="query.set('')">Show all listings</button>
-        </app-empty-state>
-      } @else if (!error()) {
-        <app-empty-state icon="truck" title="No supplier listings yet"
-                         text="When suppliers list products, you can compare their prices and order here." />
+      @for (g of groups(); track g.reach) {
+        <section class="group">
+          <div class="group-head">
+            <h2>{{ g.title }} <span class="count">{{ g.rows.length }}</span></h2>
+            <p class="muted small">{{ g.text }}</p>
+          </div>
+          <div class="cards">
+            @for (s of g.rows; track s.supplierId) {
+              <a class="card supplier" [routerLink]="['/suppliers', s.supplierId]" [queryParams]="query() ? { q: query() } : {}">
+                <div class="top">
+                  <div class="name">{{ s.companyName }}</div>
+                  <span class="pill" [class]="'pill ' + tone[s.reach]">{{ label[s.reach] }}</span>
+                </div>
+                <div class="cell-sub area"><app-icon name="truck" [size]="14" /> {{ s.deliveryArea || 'Delivery area not given' }}</div>
+                <dl class="dl facts">
+                  <dt>On time</dt><dd>{{ s.reliabilityScore | percent }}</dd>
+                  <dt>Active listings</dt><dd>{{ s.activeListings }}</dd>
+                  <dt>Lead time</dt><dd>{{ leadTime(s) }}</dd>
+                </dl>
+                @if (query() && productHits(s).length) {
+                  <div class="hits">Lists {{ productHits(s).slice(0, 3).join(', ') }}{{ productHits(s).length > 3 ? '…' : '' }}</div>
+                }
+                <span class="open">View price list <app-icon name="chevron" [size]="14" /></span>
+              </a>
+            }
+          </div>
+        </section>
       }
-    </div>
 
-    @if (ordering(); as l) {
-      <app-order-dialog [listing]="l" [items]="items()" [stockItemId]="linkFor(l)"
-                        [recommendedUnits]="recommendedUnits" (closed)="ordering.set(null)" />
+      @if (!shownCount()) {
+        <div class="card">
+          <app-empty-state icon="search" title="No suppliers match"
+                           [text]="'None of the suppliers near you is called or lists “' + query() + '”.'">
+            <button class="btn btn-secondary btn-sm" (click)="query.set('')">Show all suppliers</button>
+          </app-empty-state>
+        </div>
+      }
+    } @else if (!error()) {
+      <div class="card">
+        <app-empty-state icon="truck" title="No suppliers deliver near you yet"
+                         text="Suppliers appear here once one registers with a delivery area that reaches your location. You can still add products and record restocks you buy elsewhere.">
+          <a class="btn btn-secondary btn-sm" routerLink="/settings">Check your location</a>
+        </app-empty-state>
+      </div>
     }
   `,
   styles: [`
     .toolbar { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3);
-               flex-wrap: wrap; padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--gray-100); }
-    .best { margin-top: 2px; font-size: 11px; padding: 0 8px; line-height: 18px; }
-    .area { margin-top: var(--space-1); font-size: 11px; line-height: 18px; padding: 0 8px; }
+               flex-wrap: wrap; margin-bottom: var(--space-5); }
+    .group { margin-bottom: var(--space-6); }
+    .group-head { margin-bottom: var(--space-3); }
+    .group-head h2 { display: flex; align-items: center; gap: var(--space-2); }
+    .count { font-size: var(--text-xs); font-weight: 600; color: var(--text-muted); background: var(--gray-100);
+             border-radius: 10px; padding: 1px 8px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-4); }
+    .supplier { display: flex; flex-direction: column; gap: var(--space-2); text-decoration: none; color: inherit;
+                transition: box-shadow var(--transition), border-color var(--transition); }
+    .supplier:hover { box-shadow: var(--shadow), 0 0 0 2px var(--green-200); }
+    .supplier:focus-visible { outline: 2px solid var(--green-500); outline-offset: 2px; }
+    .top { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-2); }
+    .name { font-weight: 700; font-size: var(--text-lg); }
+    .area { display: flex; align-items: center; gap: var(--space-1); }
+    .facts { font-size: var(--text-sm); margin: var(--space-2) 0; }
+    .hits { font-size: var(--text-sm); color: var(--green-800); background: var(--green-50); border-radius: var(--radius);
+            padding: var(--space-2) var(--space-3); }
+    .open { margin-top: auto; display: inline-flex; align-items: center; gap: var(--space-1); font-weight: 600;
+            font-size: var(--text-sm); color: var(--primary); }
   `],
 })
 export class SuppliersComponent implements OnInit {
   private api = inject(InventoryApi);
   private route = inject(ActivatedRoute);
 
-  listings = signal<Listing[]>([]);
-  items = signal<StockItem[]>([]);
+  suppliers = signal<SupplierSummary[]>([]);
   loading = signal(true);
   error = signal<string | null>(null);
   query = signal('');
-  ordering = signal<Listing | null>(null);
+  label = REACH_LABEL;
+  tone = REACH_TONE;
 
-  // from a stock item page
-  private linkedItem: number | null = null;
-  recommendedUnits: number | null = null;
-
-  // partial, case-insensitive: "bread" finds "Albany Brown Bread 700g" (D39)
-  shown = computed(() => this.listings().filter(l => matchesSearch(this.query(), l.productName, l.supplierName)));
-  supplierCount = computed(() => new Set(this.shown().map(l => l.supplierId)).size);
-  // the cheapest per-unit listing of each product, where more than one supplier lists it
-  cheapest = computed(() => {
-    const best = new Map<string, Listing[]>();
-    for (const l of this.listings().filter(l => l.availableQuantity > 0)) best.set(l.productName, [...(best.get(l.productName) ?? []), l]);
-    return new Set([...best.values()].filter(g => g.length > 1)
-      .map(g => g.reduce((a, b) => (b.unitPrice < a.unitPrice ? b : a)).supplierListingId));
-  });
+  // partial, case-insensitive, on the company or any product it lists (D39)
+  private shown = computed(() =>
+    this.suppliers().filter(s => matchesSearch(this.query(), s.companyName) || this.productHits(s).length > 0 || !this.query().trim()));
+  shownCount = computed(() => this.shown().length);
+  groups = computed(() => GROUPS
+    .map(g => ({ ...g, rows: this.shown().filter(s => s.reach === g.reach) }))
+    .filter(g => g.rows.length));
 
   ngOnInit() {
-    const p = this.route.snapshot.queryParamMap;
-    this.query.set(p.get('q') ?? '');
-    this.linkedItem = p.get('item') ? Number(p.get('item')) : null;
-    this.recommendedUnits = p.get('qty') ? Number(p.get('qty')) : null;
-
-    this.api.listings().subscribe({
-      next: l => { this.listings.set(l); this.loading.set(false); },
+    this.query.set(this.route.snapshot.queryParamMap.get('q') ?? '');
+    this.api.suppliers().subscribe({
+      next: s => { this.suppliers.set(s); this.loading.set(false); },
       error: err => { this.error.set(problemText(err)); this.loading.set(false); },
     });
-    this.api.stock().subscribe({ next: i => this.items.set(i) });
   }
 
-  startOrder(l: Listing) { this.ordering.set(l); }
+  productHits(s: SupplierSummary) {
+    return this.query().trim() ? s.products.filter(p => matchesSearch(this.query(), p)) : [];
+  }
 
-  // link the item this page was opened from, otherwise the owner's item with the same name
-  linkFor(l: Listing) {
-    return this.linkedItem
-      ?? this.items().find(i => i.name.toLowerCase() === l.productName.toLowerCase())?.stockItemId ?? null;
+  leadTime(s: SupplierSummary) {
+    if (s.minLeadTimeDays == null) return '—';
+    const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
+    return s.minLeadTimeDays === s.maxLeadTimeDays ? days(s.minLeadTimeDays) : `${s.minLeadTimeDays}–${days(s.maxLeadTimeDays!)}`;
   }
 }

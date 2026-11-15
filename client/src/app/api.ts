@@ -82,7 +82,56 @@ export interface Listing {
   deliveryCost: number;
   updatedAt: string;
   inYourArea: boolean;   // the owner's location names one of the supplier's delivery areas (D39)
+  reach?: Reach;
 }
+
+// D42: in the owner's area, elsewhere in their province, or not judgeable; out-of-province
+// suppliers are never sent to the owner
+export type Reach = 'inArea' | 'nearby' | 'unknown';
+
+export interface SupplierSummary {
+  supplierId: number;
+  companyName: string;
+  deliveryArea: string | null;
+  phone: string | null;
+  reliabilityScore: number;
+  reach: Reach;
+  activeListings: number;
+  minLeadTimeDays: number | null;
+  maxLeadTimeDays: number | null;
+  products: string[];
+}
+
+export interface SupplierDetail {
+  supplierId: number;
+  companyName: string;
+  deliveryArea: string | null;
+  phone: string | null;
+  reliabilityScore: number;
+  reach: Reach;
+  listings: Listing[];
+}
+
+export interface SearchOption extends Listing {
+  packs: number;
+  units: number;
+  subtotal: number;
+  total: number;
+  canFulfil: boolean;
+}
+
+export interface ListingSearch {
+  searchTerm: string;
+  unitsWanted: number;
+  options: SearchOption[];   // reachable suppliers only, cheapest delivered first
+}
+
+export const REACH_LABEL: Record<Reach, string> = {
+  inArea: 'In your area', nearby: 'Nearby area', unknown: 'Area not confirmed',
+};
+export const REACH_TONE: Record<Reach, string> = {
+  inArea: 'pill-success', nearby: 'pill-accent', unknown: 'pill-neutral',
+};
 
 // D39: one supplier's offer when restocking an item, priced for the units wanted
 export interface ComparisonOption extends Listing {
@@ -221,6 +270,13 @@ export class InventoryApi {
   }
   lastSupplier(stockItemId: number) {
     return this.http.get<LastSupplier | null>(`${API_URL}/api/orders/last-supplier`, { params: { stockItemId } });
+  }
+  suppliers() { return this.http.get<SupplierSummary[]>(`${API_URL}/api/suppliers`); }
+  supplier(id: number) { return this.http.get<SupplierDetail>(`${API_URL}/api/suppliers/${id}`); }
+  searchListings(q: string) { return this.http.get<ListingSearch>(`${API_URL}/api/listings/search`, { params: { q } }); }
+  newProductOrder(body: { name: string; category: string; unit: string; reorderLevel: number; sellingPrice: number;
+                          supplierListingId: number; packs: number; note: string | null }) {
+    return this.http.post<{ item: StockItem; order: Order }>(`${API_URL}/api/orders/new-product`, body);
   }
   orders() { return this.http.get<Order[]>(`${API_URL}/api/orders`); }
   order(id: number) { return this.http.get<Order>(`${API_URL}/api/orders/${id}`); }

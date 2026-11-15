@@ -524,6 +524,33 @@ because the supplier interface uses them.
   preselected). With no match it lists every item, with a note that none match by name. With
   no items at all it explains that one is needed and links to Add product.
 
+**D42 — Suppliers are listed by reach, and a new product is found, priced and ordered in one flow.** _(Sun 15 Nov, FR-03, FR-06, FR-10)_
+- *Reach* (`ProductMatch.ReachOf`): extends D39's place-name match with a province lookup of
+  the townships, suburbs and metros the pilot names. In your area = the owner's location names
+  one of the supplier's places; Nearby = same province; Out of reach = only other provinces
+  (a Cape Town supplier for a Durban shop); Unknown = either side names no listed place.
+  Out-of-reach suppliers are never sent to the owner. Unknown ones are shown, in their own
+  group, rather than hidden, so a supplier who has not filled in an area is still findable.
+  The lookup is a list, not geography: a place it does not know makes the reach Unknown.
+- *Suppliers page:* `GET /api/suppliers` returns suppliers as cards (company, delivery area,
+  reliability, active listings, lead-time range), grouped In your area / Nearby areas / Not
+  confirmed. The search box still matches part of a company or product name. A card opens
+  `/suppliers/{id}` (`GET /api/suppliers/{id}`), that supplier's price list with Order buttons.
+- *Add product is a three-step flow* for a product the shop does not stock: (1) type what is
+  needed; `GET /api/listings/search` returns matching listings from reachable suppliers, priced
+  for the same number of units (the largest pack among them) so the delivered totals compare,
+  cheapest first, the first flagged Recommended; (2) pick one, set packs, unit, reorder level
+  and selling price. Unit cost is the listing's price per unit. The suggested price is cost
+  plus 25%, rounded up to end in 99c, with the margin shown; (3) confirm.
+  `POST /api/orders/new-product` creates the item at zero and places the order in one
+  transaction: if the order is refused (not enough packs), no item is created. The stock
+  arrives when the delivery is received (D37). An item created at zero is low, so it raises the
+  usual alert, which the receipt clears.
+- *When nobody near lists it,* or the owner chooses "Add without ordering", the plain form
+  from D41 is used. Reordering something already stocked is unchanged: from the item's page.
+  Alerts' Reorder now opens that page with the comparison showing, instead of the old
+  listings page.
+
 ---
 
 ## 2a. Known limitations (for Assignment 3 Q5.4 and Assignment 4 Q4.3)

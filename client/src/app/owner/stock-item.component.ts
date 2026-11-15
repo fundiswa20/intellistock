@@ -1,7 +1,7 @@
 import { Component, Input, OnInit, computed, inject, signal } from '@angular/core';
 import { DatePipe, DecimalPipe, PercentPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Comparison, ComparisonOption, InventoryApi, Movement, Prediction, StockItem, plural, problemText } from '../api';
 import { EmptyStateComponent } from '../shared/empty-state.component';
 import { IconComponent } from '../shared/icon.component';
@@ -72,8 +72,8 @@ import { OrderDialogComponent } from '../shared/order-dialog.component';
               }
             </div>
             @if (comparison(); as c) {
-              <a class="btn btn-text btn-sm" routerLink="/suppliers" [queryParams]="{ q: c.searchTerm, item: it.stockItemId, qty: c.unitsWanted }">
-                All listings <app-icon name="chevron" [size]="14" /></a>
+              <a class="btn btn-text btn-sm" routerLink="/suppliers" [queryParams]="{ q: c.searchTerm }">
+                Suppliers who list it <app-icon name="chevron" [size]="14" /></a>
             }
           </div>
 
@@ -323,6 +323,7 @@ import { OrderDialogComponent } from '../shared/order-dialog.component';
 })
 export class StockItemComponent implements OnInit {
   private api = inject(InventoryApi);
+  private route = inject(ActivatedRoute);
 
   @Input() id!: string;   // from the route, via withComponentInputBinding
 
@@ -367,6 +368,8 @@ export class StockItemComponent implements OnInit {
   ngOnInit() {
     this.load();
     this.api.stock().subscribe({ next: i => this.items.set(i) });
+    // "Reorder" on an alert opens the comparison straight away
+    if (this.route.snapshot.queryParamMap.get('restock')) this.toggleCompare();
   }
 
   toggleCompare() {

@@ -21,6 +21,17 @@ public record ReceiveOrderRequest(int? StockItemId);
 
 public record CancelOrderRequest([StringLength(255)] string? Reason);
 
+// D42: a product the shop does not stock yet, created and ordered in one step
+public record NewProductOrderRequest(
+    [Required, StringLength(120, MinimumLength = 2)] string Name,
+    [Required] string Category,
+    [Required, StringLength(30)] string Unit,
+    [Range(0, 100_000)] int ReorderLevel,
+    [Range(0, 1_000_000)] decimal SellingPrice,
+    int SupplierListingId,
+    [Range(1, 1000)] int Packs,
+    [StringLength(255)] string? Note);
+
 // FR-06 (browse supplier listings) and FR-10 (place and track orders), for the owner (D37).
 // Like stock, another owner's order answers 404 (D28).
 [ApiController]
@@ -52,8 +63,151 @@ public class OrdersController(InventoryRepository db, OrderNotifications notify)
                 unitPrice = Math.Round(x.l.PackPrice / x.l.PackSize, 2),
                 x.l.LeadTimeDays, x.l.AvailableQuantity, x.l.DeliveryCost, x.l.UpdatedAt,
                 inYourArea = ProductMatch.InArea(location, x.s.DeliveryArea),
+                reach = ReachName(location, x.s.DeliveryArea),
             }));
     }
+
+    // ------------------------------------------------------------------ D42 suppliers
+
+    // registered suppliers the owner can plausibly be delivered to: their area first, then the
+    // same province, then those whose area cannot be judged. Out-of-province suppliers are left out.
+    [HttpGet("api/suppliers")]
+    public async Task<IActionResult> Suppliers()
+    {
+        var location = await MyLocation();
+        var suppliers = await db.Suppliers.ToListAsync();
+        var listings = await db.SupplierListings.Where(l => l.IsActive).ToListAsync();
+        return Ok(suppliers
+            .Select(s => (s, reach: ProductMatch.ReachOf(location, s.DeliveryArea),
+                          mine: listings.Where(l => l.SupplierId == s.RegisteredUserId).ToList()))
+            .Where(x => x.reach != ProductMatch.Reach.OutOfReach)
+            .OrderBy(x => x.reach).ThenByDescending(x => x.s.ReliabilityScore).ThenBy(x => x.s.CompanyName)
+            .Select(x => new
+            {
+                supplierId = x.s.RegisteredUserId, companyName = x.s.CompanyName, x.s.DeliveryArea, x.s.Phone,
+                x.s.ReliabilityScore, reach = ReachName(x.reach),
+                activeListings = x.mine.Count,
+                minLeadTimeDays = x.mine.Count == 0 ? (int?)null : x.mine.Min(l => l.LeadTimeDays),
+                maxLeadTimeDays = x.mine.Count == 0 ? (int?)null : x.mine.Max(l => l.LeadTimeDays),
+                products = x.mine.Select(l => l.ProductName).OrderBy(n => n).ToList(),
+            }));
+    }
+
+    // one supplier and their active listings
+    [HttpGet("api/suppliers/{id:int}")]
+    public async Task<IActionResult> Supplier(int id)
+    {
+        var s = await db.Suppliers.SingleOrDefaultAsync(x => x.RegisteredUserId == id);
+        if (s is null) return NotFound();
+        var location = await MyLocation();
+        var listings = await db.SupplierListings.Where(l => l.SupplierId == id && l.IsActive).ToListAsync();
+        return Ok(new
+        {
+            supplierId = s.RegisteredUserId, companyName = s.CompanyName, s.DeliveryArea, s.Phone, s.ReliabilityScore,
+            reach = ReachName(location, s.DeliveryArea),
+            listings = listings.OrderBy(l => l.ProductName).Select(l => new
+            {
+                l.SupplierListingId, l.SupplierId, supplierName = s.CompanyName, s.DeliveryArea, s.ReliabilityScore,
+                l.ProductName, l.Category, l.PackSize, l.PackPrice, unitPrice = Math.Round(l.PackPrice / l.PackSize, 2),
+                l.LeadTimeDays, l.AvailableQuantity, l.DeliveryCost, l.UpdatedAt,
+                inYourArea = ProductMatch.InArea(location, s.DeliveryArea),
+                reach = ReachName(location, s.DeliveryArea),
+            }),
+        });
+    }
+
+    // D42 step 1 of adding a product: every listing matching what the owner typed, from suppliers
+    // who can reach them, priced for the same number of units (the largest pack among them) so
+    // the delivered totals compare, cheapest first
+    [HttpGet("api/listings/search")]
+    public async Task<IActionResult> Search([FromQuery] string? q, [FromQuery] int? units)
+    {
+        if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
+            return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["q"] = ["Type at least two letters of the product."],
+            }));
+        var term = q.Trim();
+        var location = await MyLocation();
+        var rows = (await (from l in db.SupplierListings
+                           join s in db.Suppliers on l.SupplierId equals s.RegisteredUserId
+                           where l.IsActive
+                           select new { l, s }).ToListAsync())
+            .Where(x => ProductMatch.Matches(term, x.l.ProductName)
+                        && ProductMatch.ReachOf(location, x.s.DeliveryArea) != ProductMatch.Reach.OutOfReach)
+            .ToList();
+        var want = Math.Max(1, units ?? (rows.Count == 0 ? 1 : rows.Max(x => x.l.PackSize)));
+        var options = rows.Select(x =>
+            {
+                var packs = (int)Math.Ceiling(want / (double)x.l.PackSize);
+                return new
+                {
+                    x.l.SupplierListingId, x.l.SupplierId, supplierName = x.s.CompanyName, x.s.DeliveryArea,
+                    x.s.ReliabilityScore, x.l.ProductName, x.l.Category, x.l.PackSize, x.l.PackPrice,
+                    unitPrice = Math.Round(x.l.PackPrice / x.l.PackSize, 2),
+                    x.l.LeadTimeDays, x.l.AvailableQuantity, x.l.DeliveryCost, x.l.UpdatedAt,
+                    packs, units = packs * x.l.PackSize, subtotal = packs * x.l.PackPrice,
+                    total = OrderRules.Total(packs, x.l.PackPrice, x.l.DeliveryCost),
+                    inYourArea = ProductMatch.InArea(location, x.s.DeliveryArea),
+                    reach = ReachName(location, x.s.DeliveryArea),
+                    canFulfil = x.l.AvailableQuantity >= packs,
+                };
+            })
+            .OrderByDescending(o => o.canFulfil).ThenBy(o => o.total).ThenBy(o => o.LeadTimeDays)
+            .ToList();
+        return Ok(new { searchTerm = term, unitsWanted = want, options });
+    }
+
+    // D42 step 3: create the stock item (opening quantity 0, unit cost from the listing's price
+    // per unit) and place the order for it, in one transaction. Stock arrives on receipt.
+    [HttpPost("api/orders/new-product")]
+    public async Task<IActionResult> NewProduct(NewProductOrderRequest req)
+    {
+        if (!StockRules.Categories.Contains(req.Category))
+            return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["category"] = [$"Category must be one of: {string.Join(", ", StockRules.Categories)}."],
+            }));
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        var listing = await LockListing(req.SupplierListingId);
+        if (ListingError(listing, req.Packs) is { } error) return error;
+
+        var now = Clock.Now;
+        var item = new StockItem
+        {
+            BusinessOwnerId = OwnerId, Name = req.Name.Trim(), Category = req.Category, Unit = req.Unit.Trim(),
+            ReorderLevel = req.ReorderLevel, UnitCost = Math.Round(listing!.PackPrice / listing.PackSize, 2),
+            SellingPrice = req.SellingPrice, CreatedAt = now,
+        };
+        db.StockItems.Add(item);
+        await db.SaveChangesAsync();
+        await StockLedger.ApplyAlertRule(db, item, now);   // at 0 it starts low, as any item created empty does
+
+        var (order, supplier) = await AddOrder(listing, req.Packs, item.StockItemId, req.Note);
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+        await notify.Placed(order, await db.BusinessOwners.SingleAsync(w => w.RegisteredUserId == OwnerId), supplier);
+        return CreatedAtAction(nameof(Get), new { id = order.PurchaseOrderId }, new
+        {
+            item = new
+            {
+                item.StockItemId, item.Name, item.Category, item.Unit, item.QuantityOnHand, item.ReorderLevel,
+                item.UnitCost, item.SellingPrice,
+            },
+            order = OrderViews.View(order, supplier, null),
+        });
+    }
+
+    private static string ReachName(string? location, string? area) => ReachName(ProductMatch.ReachOf(location, area));
+
+    private static string ReachName(ProductMatch.Reach r) => r switch
+    {
+        ProductMatch.Reach.InArea => "inArea",
+        ProductMatch.Reach.Nearby => "nearby",
+        ProductMatch.Reach.OutOfReach => "outOfReach",
+        _ => "unknown",
+    };
 
     // D39: the supplier of the owner's most recent order for a product - by stock item, or by a
     // product name matched like the comparison does. Declined and cancelled orders do not count.
@@ -164,14 +318,32 @@ public class OrdersController(InventoryRepository db, OrderNotifications notify)
     public async Task<IActionResult> Place(PlaceOrderRequest req)
     {
         await using var tx = await db.Database.BeginTransactionAsync();
+        var listing = await LockListing(req.SupplierListingId);
+        if (ListingError(listing, req.Packs) is { } error) return error;
+        if (req.StockItemId is { } itemId && !await MyItem(itemId).AnyAsync())
+            return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["stockItemId"] = ["That stock item does not exist."],
+            }));
 
-        // lock the listing so two orders cannot both take the last packs
-        var listing = await db.SupplierListings
-            .FromSqlInterpolated($"SELECT * FROM SupplierListing WHERE SupplierListingId = {req.SupplierListingId} FOR UPDATE")
+        var (order, supplier) = await AddOrder(listing!, req.Packs, req.StockItemId, req.Note);
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+        var owner = await db.BusinessOwners.SingleAsync(w => w.RegisteredUserId == OwnerId);
+        await notify.Placed(order, owner, supplier);
+        return CreatedAtAction(nameof(Get), new { id = order.PurchaseOrderId }, OrderViews.View(order, supplier, null));
+    }
+
+    // lock the listing so two orders cannot both take the last packs
+    private Task<SupplierListing?> LockListing(int id) =>
+        db.SupplierListings.FromSqlInterpolated($"SELECT * FROM SupplierListing WHERE SupplierListingId = {id} FOR UPDATE")
             .SingleOrDefaultAsync();
+
+    private IActionResult? ListingError(SupplierListing? listing, int packs)
+    {
         if (listing is null || !listing.IsActive)
             return NotFound(new ProblemDetails { Title = "That listing is no longer available.", Status = 404 });
-        if (req.Packs > listing.AvailableQuantity)
+        if (packs > listing.AvailableQuantity)
             return Conflict(new ProblemDetails
             {
                 Title = listing.AvailableQuantity == 0
@@ -179,35 +351,31 @@ public class OrdersController(InventoryRepository db, OrderNotifications notify)
                     : $"The supplier has only {listing.AvailableQuantity} {(listing.AvailableQuantity == 1 ? "pack" : "packs")} available.",
                 Status = 409,
             });
-        if (req.StockItemId is { } itemId && !await MyItem(itemId).AnyAsync())
-            return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]>
-            {
-                ["stockItemId"] = ["That stock item does not exist."],
-            }));
+        return null;
+    }
 
+    // takes the packs off the listing and adds the order; the caller saves and commits
+    private async Task<(PurchaseOrder, Supplier)> AddOrder(SupplierListing listing, int packs, int? stockItemId, string? note)
+    {
         var supplier = await db.Suppliers.SingleAsync(s => s.RegisteredUserId == listing.SupplierId);
-        listing.AvailableQuantity -= req.Packs;
+        listing.AvailableQuantity -= packs;
         var order = new PurchaseOrder
         {
             BusinessOwnerId = OwnerId,
             SupplierId = listing.SupplierId,
             SupplierListingId = listing.SupplierListingId,
-            StockItemId = req.StockItemId,
+            StockItemId = stockItemId,
             ProductName = listing.ProductName,
             PackSize = listing.PackSize,
             PackPrice = listing.PackPrice,
-            Packs = req.Packs,
+            Packs = packs,
             DeliveryCost = listing.DeliveryCost,
             Status = "Placed",
-            Note = string.IsNullOrWhiteSpace(req.Note) ? null : req.Note.Trim(),
+            Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
             CreatedAt = Clock.Now,
         };
         db.PurchaseOrders.Add(order);
-        await db.SaveChangesAsync();
-        await tx.CommitAsync();
-        var owner = await db.BusinessOwners.SingleAsync(w => w.RegisteredUserId == OwnerId);
-        await notify.Placed(order, owner, supplier);
-        return CreatedAtAction(nameof(Get), new { id = order.PurchaseOrderId }, OrderViews.View(order, supplier, null));
+        return (order, supplier);
     }
 
     [HttpPost("api/orders/{id:int}/cancel")]

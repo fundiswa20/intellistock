@@ -5,12 +5,13 @@ import { CATEGORIES, InventoryApi, StockItem, plural, problemText } from '../api
 import { EmptyStateComponent } from '../shared/empty-state.component';
 import { IconComponent } from '../shared/icon.component';
 import { MoneyPipe } from '../shared/money.pipe';
+import { AddProductWizardComponent } from './add-product-wizard.component';
 
 // FR-03 (read) and FR-05: the owner's stock, with low items flagged
 @Component({
   selector: 'app-stock-list',
   standalone: true,
-  imports: [FormsModule, EmptyStateComponent, IconComponent, MoneyPipe],
+  imports: [FormsModule, EmptyStateComponent, IconComponent, MoneyPipe, AddProductWizardComponent],
   template: `
     <div class="page-head">
       <div>
@@ -38,7 +39,7 @@ import { MoneyPipe } from '../shared/money.pipe';
             <button [class.active]="!lowOnly()" (click)="lowOnly.set(false)">All<span class="count">{{ items().length }}</span></button>
             <button [class.active]="lowOnly()" (click)="lowOnly.set(true)">Low stock<span class="count">{{ lowCount() }}</span></button>
           </div>
-          <button type="button" class="btn btn-primary add" (click)="startNew('')"><app-icon name="plus" [size]="16" /> Add product</button>
+          <button type="button" class="btn btn-primary add" (click)="wizard.set(true)"><app-icon name="plus" [size]="16" /> Add product</button>
         </div>
 
         @if (shown().length) {
@@ -86,13 +87,19 @@ import { MoneyPipe } from '../shared/money.pipe';
         } @else {
           <app-empty-state icon="stock" title="No products yet"
                            text="Products added to your shop appear here with their stock on hand and reorder level.">
-            <button type="button" class="btn btn-primary btn-sm" (click)="startNew('')"><app-icon name="plus" [size]="14" /> Add product</button>
+            <button type="button" class="btn btn-primary btn-sm" (click)="wizard.set(true)"><app-icon name="plus" [size]="14" /> Add product</button>
           </app-empty-state>
         }
       </div>
     }
 
     <!-- FR-03 create. Opened with ?new=<product name>&order=<id> from an order that has no item to book into -->
+    <!-- D42: a product not stocked yet is found, priced and ordered in one flow -->
+    @if (wizard()) {
+      <app-add-product-wizard [items]="items()" (closed)="wizard.set(false)"
+                              (plain)="wizard.set(false); startNew($event)" />
+    }
+
     @if (creating()) {
       <div class="modal-backdrop" (click)="creating.set(false)">
         <form class="modal" (click)="$event.stopPropagation()" (ngSubmit)="create()" #f="ngForm" role="dialog" aria-labelledby="new-title">
@@ -163,6 +170,7 @@ export class StockListComponent implements OnInit {
   categories = CATEGORIES;
 
   creating = signal(false);
+  wizard = signal(false);
   saving = signal(false);
   formError = signal<string | null>(null);
   forOrder: number | null = null;
@@ -182,9 +190,13 @@ export class StockListComponent implements OnInit {
 
   ngOnInit() {
     const p = this.route.snapshot.queryParamMap;
-    if (p.has('new')) {
+    // ?new=<name>&order=<id>: an order already placed needs an item to be booked into, so the
+    // plain form; ?new= alone (from an empty state) opens the find-and-order flow
+    if (p.get('new')) {
       this.forOrder = p.get('order') ? Number(p.get('order')) : null;
       this.startNew(p.get('new') ?? '');
+    } else if (p.has('new')) {
+      this.wizard.set(true);
     }
     this.api.stock().subscribe({
       next: items => { this.items.set(items); this.loading.set(false); },

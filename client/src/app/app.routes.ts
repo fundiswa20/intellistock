@@ -11,6 +11,7 @@ import { StockListComponent } from './owner/stock-list.component';
 import { StockItemComponent } from './owner/stock-item.component';
 import { AlertsComponent } from './owner/alerts.component';
 import { SuppliersComponent } from './owner/suppliers.component';
+import { SupplierDetailComponent } from './owner/supplier-detail.component';
 import { OrdersComponent } from './pages/orders.component';
 import { OrderDetailComponent } from './pages/order-detail.component';
 import { SupplierDashboardComponent } from './supplier/supplier-dashboard.component';
@@ -34,6 +35,7 @@ export const routes: Routes = [
       { path: 'stock/:id', component: StockItemComponent, canActivate: [owner], title: 'Item · IntelliStock' },
       { path: 'alerts', component: AlertsComponent, canActivate: [owner], title: 'Alerts · IntelliStock' },
       { path: 'suppliers', component: SuppliersComponent, canActivate: [owner], title: 'Suppliers · IntelliStock' },
+      { path: 'suppliers/:id', component: SupplierDetailComponent, canActivate: [owner], title: 'Supplier · IntelliStock' },
       { path: 'orders', component: OrdersComponent, canActivate: [owner], title: 'Orders · IntelliStock' },
       { path: 'orders/:id', component: OrderDetailComponent, canActivate: [owner], title: 'Order · IntelliStock' },
       { path: 'settings', component: SettingsComponent, canActivate: [owner], title: 'Settings · IntelliStock' },

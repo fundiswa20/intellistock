@@ -42,8 +42,8 @@ import { EmptyStateComponent } from '../shared/empty-state.component';
                         <span class="cell-sub"> {{ plural(a.unit, a.currentQuantity) }}</span></td>
                       <td class="num secondary">{{ a.reorderLevel }}</td>
                       <td class="nowrap secondary">{{ a.createdAt | date: 'd MMM, HH:mm' }}</td>
-                      <td class="num"><a class="btn btn-secondary btn-sm" routerLink="/suppliers"
-                             [queryParams]="{ q: a.stockItemName, item: a.stockItemId }" (click)="$event.stopPropagation()">Reorder</a></td>
+                      <td class="num"><a class="btn btn-secondary btn-sm" [routerLink]="['/stock', a.stockItemId]"
+                             [queryParams]="{ restock: 1 }" (click)="$event.stopPropagation()">Reorder</a></td>
                     </tr>
                   }
                 </tbody>
