@@ -113,7 +113,7 @@ immutable transaction log, FR-05 low-stock alerts, FR-08 reorder prediction. All
 implemented and tested in the API; client screens follow (see the traceability table in
 `docs/BUILD-JOURNAL.md`).
 
-Built on 15 Nov; the integration tests and a hand check are still to run (journal O5):
+Built and checked on 15 Nov (integration tests and a hand check of both roles):
 - FR-01 registration — owners and suppliers register from the client.
 - FR-06, FR-07 — owners browse supplier listings; suppliers manage their listings and orders.
 - FR-10 — order placement and status tracking, through to booking a delivery into stock.

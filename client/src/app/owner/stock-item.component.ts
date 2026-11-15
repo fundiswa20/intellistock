@@ -49,7 +49,11 @@ import { MoneyPipe } from '../shared/money.pipe';
         </div>
         <div class="card kpi">
           <span class="label">Days of cover</span>
-          <span class="figure figure-lg">{{ prediction()?.daysUntilStockOut === null || prediction()?.daysUntilStockOut === undefined ? '—' : (prediction()!.daysUntilStockOut! | number: '1.0-1') }}<span class="figure-unit">days</span></span>
+          @if (prediction()?.daysUntilStockOut != null) {
+            <span class="figure figure-lg">{{ prediction()!.daysUntilStockOut! | number: '1.0-1' }}<span class="figure-unit">days</span></span>
+          } @else {
+            <span class="figure figure-lg muted">—</span>
+          }
           <span class="hint">at the forecast rate of sale</span>
         </div>
       </div>

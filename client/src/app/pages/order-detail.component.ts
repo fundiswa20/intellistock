@@ -204,7 +204,7 @@ export class OrderDetailComponent implements OnInit {
   });
 
   ngOnInit() {
-    if (this.route.snapshot.queryParamMap.get('placed')) this.message.set('Order placed. The supplier has been sent it to confirm.');
+    if (this.route.snapshot.queryParamMap.get('placed')) this.message.set('Order placed. It is waiting for the supplier to confirm.');
     const id = Number(this.id);
     (this.owner ? this.api.order(id) : this.api.supplierOrder(id)).subscribe({
       next: o => { this.order.set(o); this.receiveItem = o.stockItemId; },

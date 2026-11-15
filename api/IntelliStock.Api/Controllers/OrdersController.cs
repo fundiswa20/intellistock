@@ -53,14 +53,14 @@ public class OrdersController(InventoryRepository db) : ControllerBase
 
     [HttpGet("api/orders")]
     public async Task<IActionResult> List() =>
-        Ok((await MyOrders().OrderByDescending(x => x.o.CreatedAt).ThenByDescending(x => x.o.PurchaseOrderId)
-                .ToListAsync())
+        Ok((await MyOrders().ToListAsync())
+            .OrderByDescending(x => x.o.CreatedAt).ThenByDescending(x => x.o.PurchaseOrderId)
             .Select(x => OrderViews.View(x.o, x.s, null)));
 
     [HttpGet("api/orders/{id:int}")]
     public async Task<IActionResult> Get(int id)
     {
-        var x = await MyOrders().SingleOrDefaultAsync(r => r.o.PurchaseOrderId == id);
+        var x = await MyOrders(id).SingleOrDefaultAsync();
         return x is null ? NotFound() : Ok(OrderViews.View(x.o, x.s, null));
     }
 
@@ -179,10 +179,11 @@ public class OrdersController(InventoryRepository db) : ControllerBase
     private IQueryable<StockItem> MyItem(int id) =>
         db.StockItems.Where(s => s.StockItemId == id && s.BusinessOwnerId == OwnerId && s.IsActive);
 
-    private IQueryable<OrderRow> MyOrders() =>
+    // filter before projecting: EF cannot translate a filter on the projected record
+    private IQueryable<OrderRow> MyOrders(int? id = null) =>
         from o in db.PurchaseOrders
         join s in db.Suppliers on o.SupplierId equals s.RegisteredUserId
-        where o.BusinessOwnerId == OwnerId
+        where o.BusinessOwnerId == OwnerId && (id == null || o.PurchaseOrderId == id)
         select new OrderRow(o, s);
 
     private record OrderRow(PurchaseOrder o, Supplier s);

@@ -26,23 +26,32 @@ and tested in the API but has no client screen yet (the minimal client is Tue 29
 
 | ID | Requirement | Status | Reason | Evidence |
 |---|---|---|---|---|
-| FR-01 | Registration | Built — integration tests not yet run | `POST /api/auth/register` for both roles, hashed with the same `PasswordHasher`; taken email 409; register screen (D37). | `SupplierAndOrderTests` (3, not yet run), `PasswordHashTests` |
+| FR-01 | Registration | Pass | `POST /api/auth/register` for both roles, hashed with the same `PasswordHasher`; taken email 409; register screen (D37). | `SupplierAndOrderTests` (4), `PasswordHashTests` |
 | FR-02 | Login | Pass | JWT login against seeded users; wrong password and unknown email get the same 401; missing or forged token rejected; suppliers refused stock endpoints. | `tests-integration.txt` (AuthTests, 6), `api-endpoints.txt` |
 | FR-03 | Stock item CRUD | Pass — API only | Create, read, update, soft delete; each owner sees only their own stock; another owner's item is 404. | `tests-integration.txt` (StockItemTests, 7) |
 | FR-04 | Stock movement, immutable transaction log | Pass — API only | Sale/Restock/Adjustment with running balance and row lock; overselling refused; UPDATE/DELETE rejected by database triggers. | `tests-integration.txt`, `tests-unit.txt`, `db-verification.txt` |
 | FR-05 | Low-stock alerts | Pass — API only | Raised at or below the reorder level, resolved on restock, one open alert per item enforced by the database; 8 open in the seed. | `tests-integration.txt`, `db-verification.txt` |
-| FR-06 | Supplier functionality | Built — integration tests not yet run | Owners browse every active listing, cheapest per unit first, and order from it (D37). | `SupplierAndOrderTests` (not yet run) |
-| FR-07 | Supplier functionality | Built — integration tests not yet run | Suppliers add, edit and hide listings and answer orders, in their own area of the client (D37). | `SupplierAndOrderTests` (not yet run) |
+| FR-06 | Supplier functionality | Pass | Owners browse every active listing, cheapest per unit first, and order from it (D37). | `SupplierAndOrderTests`, hand check 15 Nov |
+| FR-07 | Supplier functionality | Pass | Suppliers add, edit and hide listings and answer orders, in their own area of the client (D37). | `SupplierAndOrderTests`, hand check 15 Nov |
 | FR-08 | Reorder prediction | Pass — API only | Model called with history from the transaction log; days to stock-out and reorder quantity derived in the API; threshold-based advice when the model cannot be trusted. | `api-endpoints.txt`, `tests-integration.txt` (PredictionTests, 8), `model-*.txt` |
 | FR-09 | Consolidated reorder plan | Not met | Deferred. | — |
-| FR-10 | Order placement and status tracking | Built — integration tests not yet run | Placed → Confirmed → Dispatched → Delivered, decline and cancel, packs reserved and returned, delivery booked into stock as a Restock (D37). | `OrderRulesTests` (unit, pass), `SupplierAndOrderTests` (not yet run) |
+| FR-10 | Order placement and status tracking | Pass | Placed → Confirmed → Dispatched → Delivered, decline and cancel, packs reserved and returned, delivery booked into stock as a Restock (D37). | `OrderRulesTests` (unit, pass), `SupplierAndOrderTests`, hand check 15 Nov |
 | ETR-01 | MAPE ≤ 20% and ≥ 10% better than baseline | Pass | v1.1-relative 10.53% vs 22.18% baseline (52.5% better), chronological test period. | `model-evaluation-v1.1-relative.txt` |
 | NFR-02 | p95 response < 3 s for up to 50 concurrent users | Partial | Single-user sequential p95 34.6 ms on GET /api/stock (23 items, Docker). No concurrency test was run. | `response-times.txt` |
 | ETR-03 | Insufficient history and low confidence handled | Pass | Model service: 422 under 30 days and `lowConfidence` under 0.6. API: threshold-based advice with the reason recorded and shown (D25). | `model-service-smoke.txt`, `tests-integration.txt` |
 
 **Open issues**
 
-**O5 — The 15 Nov changes have not been run against the database or checked by hand.** Docker Desktop was not running, so the integration tests (including the 13 new ones in `SupplierAndOrderTests`), the reseed, the container rebuild and the hand check of both workflows are still to do. The API and client build, and the unit tests pass (62, including `OrderRulesTests`). To close: `docker compose down -v`, `docker compose up -d --build`, run the integration tests, then walk the owner and supplier workflows.
+**O6 — `PredictionTests.Model_422_insufficient_history_falls_back_for_a_new_item` depends on today's date.**
+It expects Fatti's & Moni's Spaghetti (added 14 Sep) to have under 30 days of history. The API
+measures history up to the real date, so from 14 Oct the item has a full 60 days and the
+assertion `historyDays < 30` fails. On 15 Nov it fails for this reason only; 106 of 107 tests
+pass. The same cause makes live forecasts near zero, because the seed's sales end on 29 Sep.
+*To close:* either regenerate the seed so it ends yesterday (`generate_seed.py --end`), or
+have the test create its own new item instead of relying on the seeded one.
+
+_O5 (15 Nov changes not run) — closed 15 Nov: reseeded, 106/107 tests pass (the one failure is
+O6), both workflows checked by hand._
 
 Resolved on Mon 28:
 
@@ -626,8 +635,20 @@ MAPE 10.51% vs 22.18% baseline (`86de1ea`).
   `SupplierController`, `GET /api/stock/alerts?status=`, 13 integration tests and
   `OrderRulesTests`.
 - Rebuilt the client as a multi-page app with a design-token palette (D36).
-- API and client build; 62 unit tests pass. Integration tests, reseed, container rebuild and
-  the hand check are not done: Docker Desktop was not running (O5).
+- API and client build; 62 unit tests pass. Docker Desktop was not running at first (O5).
+- Later the same day: `docker compose down -v` and rebuilt. Integration tests found one real
+  bug: `GET /api/orders/{id}` answered 500, because EF could not translate a filter applied
+  after projecting into a record; the filter now comes before the projection. 106/107 pass;
+  the remaining failure is date-dependent and predates this work (O6).
+- Hand check in the browser pane, both roles. Owner: signed-out redirect to sign-in and back,
+  dashboard figures, alerts (0 open, 85 resolved), orders, received order #6 (Clover milk
+  35 → 71), ordered maize meal from the stock item page (#10, R 744.07), Settings, and an
+  owner opening `/supplier/listings` got the not-authorised page. Supplier: dashboard,
+  confirmed → dispatched → delivered #10, edited a listing to 3 packs and saw it under
+  "Running low", Settings with reliability, and `/orders` got the not-authorised page.
+- Fixed from the hand check: "—days" when there is no forecast, and the order-placed message.
+- Not checked: screenshots (the app window was hidden, so the pages were checked through their
+  text and structure, not visually), and the phone-width layout.
 
 ## 5. Questions to be ready for
 
