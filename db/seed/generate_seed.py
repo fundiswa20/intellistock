@@ -69,6 +69,7 @@ SUPPLIERS = [
     (5, "Mzansi Bulk Traders", "012 555 0145", "Tshwane North, Soshanguve", 0.81),
 ]
 DELIVERY_FEE = {3: 85.00, 4: 60.00, 5: 120.00}   # flat fee per order
+SUPPLIER_AREA = {1: [3, 4], 2: [5]}                # suppliers that deliver to each owner
 
 # FR-10 demo orders: owner, supplier, product, packs, status, days before the end date.
 # Illustrative only: they are not tied to the simulated wholesaler trips in the log, so a
@@ -283,7 +284,16 @@ def simulate_shop(owner_id, specs, first_item_id, start, end, rng):
 def demo_orders(listings, all_items, end):
     rows = []
     for owner, sid, product, packs, status, days_ago in ORDERS:
-        listing_id, l = next((i + 1, l) for i, l in enumerate(listings) if l[0] == sid and l[1] == product)
+        # which supplier stocks what is random, so fall back to another supplier serving the
+        # same area; prefer active listings
+        area = [sid] + [s for s in SUPPLIER_AREA[owner] if s != sid]
+        found = sorted(((area.index(l[0]), -l[6], i + 1, l) for i, l in enumerate(listings)
+                        if l[0] in area and l[1] == product), key=lambda x: x[:2])
+        if not found:
+            print(f"  demo order skipped: no supplier near owner {owner} lists {product}")
+            continue
+        _, _, listing_id, l = found[0]
+        sid = l[0]
         item = next((it["id"] for o, it in all_items if o == owner and it["name"] == product), None)
         placed = datetime.combine(end - timedelta(days=days_ago), time(8, 30))
         step = timedelta(hours=3) if days_ago <= 1 else timedelta(days=1)
@@ -379,7 +389,7 @@ def main():
                                        "ProductName", "PackSize", "PackPrice", "Packs", "DeliveryCost", "Status",
                                        "Note", "CreatedAt", "ConfirmedAt", "DispatchedAt", "DeliveredAt",
                                        "ClosedAt", "ReceivedAt"],
-                     demo_orders(listings, all_items, end))
+                     orders := demo_orders(listings, all_items, end))
 
     with open(OUT, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(lines) + "\n")
@@ -388,7 +398,7 @@ def main():
     print(f"Wrote {os.path.relpath(OUT)}")
     print(f"  users {len(USERS)}, stock items {len(all_items)}, transactions {len(all_txns):,}, "
           f"alerts {len(all_alerts)} ({sum(a['resolved'] is None for a in all_alerts)} open), "
-          f"supplier listings {len(listings)}, orders {len(ORDERS)}")
+          f"supplier listings {len(listings)}, orders {len(orders)}")
     print(f"  at or below reorder level on {end}: {len(below)} - {', '.join(below)}")
 
 

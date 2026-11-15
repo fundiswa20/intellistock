@@ -30,7 +30,7 @@ and tested in the API but has no client screen yet (the minimal client is Tue 29
 | FR-02 | Login | Pass | JWT login against seeded users; wrong password and unknown email get the same 401; missing or forged token rejected; suppliers refused stock endpoints. | `tests-integration.txt` (AuthTests, 6), `api-endpoints.txt` |
 | FR-03 | Stock item CRUD | Pass — API only | Create, read, update, soft delete; each owner sees only their own stock; another owner's item is 404. | `tests-integration.txt` (StockItemTests, 7) |
 | FR-04 | Stock movement, immutable transaction log | Pass — API only | Sale/Restock/Adjustment with running balance and row lock; overselling refused; UPDATE/DELETE rejected by database triggers. | `tests-integration.txt`, `tests-unit.txt`, `db-verification.txt` |
-| FR-05 | Low-stock alerts | Pass — API only | Raised at or below the reorder level, resolved on restock, one open alert per item enforced by the database; 8 open in the seed. | `tests-integration.txt`, `db-verification.txt` |
+| FR-05 | Low-stock alerts | Pass — API only | Raised at or below the reorder level, resolved on restock, one open alert per item enforced by the database; 2 open in the seed ending 14 Nov. | `tests-integration.txt`, `db-verification.txt` |
 | FR-06 | Supplier functionality | Pass | Owners browse every active listing, cheapest per unit first, and order from it (D37). | `SupplierAndOrderTests`, hand check 15 Nov |
 | FR-07 | Supplier functionality | Pass | Suppliers add, edit and hide listings and answer orders, in their own area of the client (D37). | `SupplierAndOrderTests`, hand check 15 Nov |
 | FR-08 | Reorder prediction | Pass — API only | Model called with history from the transaction log; days to stock-out and reorder quantity derived in the API; threshold-based advice when the model cannot be trusted. | `api-endpoints.txt`, `tests-integration.txt` (PredictionTests, 8), `model-*.txt` |
@@ -42,10 +42,12 @@ and tested in the API but has no client screen yet (the minimal client is Tue 29
 
 **Open issues**
 
-**O7 — Live forecasts are near zero because the seed's sales end on 29 Sep.** The API measures
-history up to today, so on 15 Nov the last 30+ days have no sales and most items show 0 demand
-and "Not needed". *To close:* regenerate the seed to end the day before a demo
-(`generate_seed.py --end <yesterday>`), then `docker compose down -v` and up again.
+None open.
+
+_O7 (stale seed dates) — closed 15 Nov: seed regenerated with `--end 2026-11-14` (120 days
+from 18 Jul; 5,742 transactions, 101 alerts with 2 open, 54 listings, 8 demo orders). Live
+forecasts are model forecasts again, e.g. Simba Chips 16.3/day, 7.2 days of cover, confidence
+0.82. The seed ages again after each day; regenerate with `--end <yesterday>` before a demo._
 
 _O6 (date-dependent 422 test) — closed 15 Nov: the test now creates its own item backdated 10
 days and expects exactly 9 days of history, instead of relying on the seeded Spaghetti, which
@@ -650,6 +652,10 @@ MAPE 10.51% vs 22.18% baseline (`86de1ea`).
 - Fixed from the hand check: "—days" when there is no forecast, and the order-placed message.
 - O6 fixed: the 422 fallback test no longer depends on today's date; 107/107 pass. The stale
   seed dates behind near-zero live forecasts are recorded separately as O7.
+- O7 fixed: seed regenerated to end 14 Nov and the database reset. The demo orders now fall
+  back to another supplier in the same area when the named one doesn't list the product (the
+  listings are random); Coca-Cola had no Cape Town listing this time, so there are 8 orders,
+  not 9. 107/107 pass.
 - Not checked: screenshots (the app window was hidden, so the pages were checked through their
   text and structure, not visually), and the phone-width layout.
 
