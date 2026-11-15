@@ -1,18 +1,21 @@
-import { Component, Input, OnInit, inject, signal } from '@angular/core';
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { Component, Input, OnInit, computed, inject, signal } from '@angular/core';
+import { DatePipe, DecimalPipe, PercentPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { InventoryApi, Movement, Prediction, StockItem, plural, problemText } from '../api';
+import { Comparison, ComparisonOption, InventoryApi, Movement, Prediction, StockItem, plural, problemText } from '../api';
 import { EmptyStateComponent } from '../shared/empty-state.component';
 import { IconComponent } from '../shared/icon.component';
 import { MoneyPipe } from '../shared/money.pipe';
+import { OrderDialogComponent } from '../shared/order-dialog.component';
 
 // One stock item: details, recent movements (FR-04), record a movement (FR-04),
-// and the reorder recommendation (FR-08) with which path produced it (ETR-03, D25)
+// the reorder recommendation (FR-08) with which path produced it (ETR-03, D25), and
+// restocking from a supplier without leaving the item (D39)
 @Component({
   selector: 'app-stock-item',
   standalone: true,
-  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, MoneyPipe, EmptyStateComponent, IconComponent],
+  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, PercentPipe, MoneyPipe, EmptyStateComponent, IconComponent,
+            OrderDialogComponent],
   template: `
     <a class="back-link" routerLink="/stock"><app-icon name="back" [size]="16" /> All stock</a>
 
@@ -30,10 +33,9 @@ import { MoneyPipe } from '../shared/money.pipe';
             <span class="muted">(cost {{ it.unitCost | money }})</span></p>
         </div>
         <div class="page-actions">
-          <a class="btn btn-primary" routerLink="/suppliers"
-             [queryParams]="{ q: it.name, item: it.stockItemId, qty: prediction()?.recommendedQuantity || null }">
-            <app-icon name="truck" [size]="16" /> Order from a supplier
-          </a>
+          <button class="btn btn-primary" (click)="toggleCompare()" [attr.aria-expanded]="comparing()">
+            <app-icon name="truck" [size]="16" /> {{ comparing() ? 'Hide suppliers' : 'Order from a supplier' }}
+          </button>
         </div>
       </div>
 
@@ -57,6 +59,119 @@ import { MoneyPipe } from '../shared/money.pipe';
           <span class="hint">at the forecast rate of sale</span>
         </div>
       </div>
+
+      <!-- D39: restocking - every supplier of this product, priced for the recommended quantity -->
+      @if (comparing()) {
+        <section class="card compare">
+          <div class="card-head">
+            <div>
+              <h2>Restock from a supplier</h2>
+              @if (comparison(); as c) {
+                <p>{{ c.options.length }} {{ c.options.length === 1 ? 'listing matches' : 'listings match' }} “{{ c.searchTerm }}”,
+                  priced for {{ c.unitsWanted }} {{ plural(it.unit, c.unitsWanted) }} delivered, cheapest first.</p>
+              }
+            </div>
+            @if (comparison(); as c) {
+              <a class="btn btn-text btn-sm" routerLink="/suppliers" [queryParams]="{ q: c.searchTerm, item: it.stockItemId, qty: c.unitsWanted }">
+                All listings <app-icon name="chevron" [size]="14" /></a>
+            }
+          </div>
+
+          @if (compareError()) { <div class="notice notice-error">{{ compareError() }}</div> }
+          @if (!comparison() && !compareError()) { <p class="muted">Comparing suppliers…</p> }
+
+          @if (comparison(); as c) {
+            @if (c.lastSupplier; as last) {
+              <div class="notice notice-success usual">
+                <app-icon name="clock" [size]="16" />
+                <span>Last time you ordered this from <strong>{{ last.supplierName }}</strong>
+                  ({{ last.packs }} {{ last.packs === 1 ? 'pack' : 'packs' }}, {{ last.total | money }}, {{ last.createdAt | date: 'd MMM' }}).
+                  @if (usual(); as u) {
+                    @if (recommended(); as r) {
+                      @if (u === r) { They are still the cheapest option. }
+                      @else { {{ r.supplierName }} would save you {{ u.total - r.total | money }} on this order. }
+                    }
+                  } @else { They don't list it any more. }
+                </span>
+              </div>
+            }
+
+            @if (c.options.length) {
+              <div class="cards" [class]="'cards cards-' + cards().length">
+                @for (o of cards(); track o.supplierListingId) {
+                  <article class="option" [class.option-top]="o === recommended()" [class.option-usual]="o.orderedLastTime">
+                    <div class="option-tags">
+                      @if (o === recommended()) { <span class="pill pill-solid pill-plain">Recommended</span> }
+                      @else { <span class="pill pill-neutral pill-plain">#{{ rank(o) }}</span> }
+                      @if (o.orderedLastTime) { <span class="pill pill-plain usual-pill">You ordered from them last time</span> }
+                    </div>
+                    <div class="option-company">{{ o.supplierName }}</div>
+                    <div class="cell-sub">{{ o.productName }}
+                      @if (!o.sameProduct) { <span class="pill pill-muted pill-plain mini">Similar product</span> }</div>
+                    <div class="option-total">
+                      <span class="label">Delivered cost</span>
+                      <span class="figure" [class.figure-lg]="o === recommended()">{{ o.total | money }}</span>
+                      @if (recommended(); as r) {
+                        @if (o !== r && o.total > r.total) { <span class="cell-sub more">+{{ o.total - r.total | money }} vs recommended</span> }
+                      }
+                    </div>
+                    <dl class="dl option-dl">
+                      <dt>{{ o.packs }} × {{ o.packPrice | money }}</dt><dd>{{ o.subtotal | money }}</dd>
+                      <dt>Delivery</dt><dd>{{ o.deliveryCost | money }}</dd>
+                      <dt>Lead time</dt><dd>{{ o.leadTimeDays }} {{ o.leadTimeDays === 1 ? 'day' : 'days' }}</dd>
+                      <dt>Reliability</dt><dd>{{ o.reliabilityScore | percent }} on time</dd>
+                    </dl>
+                    <div class="option-foot">
+                      <span class="pill" [class.pill-success]="o.inYourArea" [class.pill-accent]="!o.inYourArea">
+                        {{ o.inYourArea ? 'In your area' : 'Outside your area' }}</span>
+                      @if (!o.canFulfil) {
+                        <span class="cell-sub">{{ o.availableQuantity === 0 ? 'Out of stock' : 'Only ' + o.availableQuantity + ' packs' }}</span>
+                      }
+                      <button class="btn btn-sm" [class.btn-primary]="o === recommended()" [class.btn-secondary]="o !== recommended()"
+                              [disabled]="o.availableQuantity === 0" (click)="ordering.set(o)">Order</button>
+                    </div>
+                  </article>
+                }
+              </div>
+
+              @if (rest().length) {
+                <div class="table-wrap rest">
+                  <table class="table">
+                    <thead>
+                      <tr><th>Supplier</th><th class="num">Packs</th><th class="num">Delivered cost</th><th class="num">vs recommended</th>
+                        <th class="num">Lead time</th><th>Area</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      @for (o of rest(); track o.supplierListingId) {
+                        <tr>
+                          <td><div class="strong">{{ o.supplierName }}</div>
+                            <div class="cell-sub">{{ o.productName }} · {{ o.reliabilityScore | percent }} on time</div></td>
+                          <td class="num secondary nowrap">{{ o.packs }} × {{ o.packSize }}</td>
+                          <td class="num"><span class="qty">{{ o.total | money }}</span></td>
+                          <td class="num secondary">@if (recommended(); as r) { +{{ o.total - r.total | money }} } @else { — }</td>
+                          <td class="num secondary nowrap">{{ o.leadTimeDays }} {{ o.leadTimeDays === 1 ? 'day' : 'days' }}</td>
+                          <td><span class="pill" [class.pill-success]="o.inYourArea" [class.pill-accent]="!o.inYourArea">
+                            {{ o.inYourArea ? 'In your area' : 'Outside your area' }}</span></td>
+                          <td class="num"><button class="btn btn-secondary btn-sm" [disabled]="o.availableQuantity === 0"
+                                                  (click)="ordering.set(o)">Order</button></td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+            } @else {
+              <app-empty-state compact icon="truck" title="No supplier lists this yet"
+                               [text]="'No active listing matches “' + c.searchTerm + '”. Record a restock below when you buy it elsewhere.'" />
+            }
+          }
+        </section>
+      }
+
+      @if (ordering(); as o) {
+        <app-order-dialog [listing]="o" [items]="items()" [stockItemId]="it.stockItemId"
+                          [recommendedUnits]="prediction()?.recommendedQuantity || null" (closed)="ordering.set(null)" />
+      }
 
       <div class="layout">
         <!-- left: the recommendation -->
@@ -181,7 +296,29 @@ import { MoneyPipe } from '../shared/money.pipe';
     .type-sale { background: var(--gray-100); color: var(--gray-700); }
     .type-restock { background: var(--green-100); color: var(--green-800); }
     .type-adjustment { background: var(--amber-100); color: var(--amber-700); }
-    @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+    .compare { margin-bottom: var(--space-5); box-shadow: var(--shadow), inset 0 3px 0 var(--green-600); }
+    .usual { align-items: center; }
+    .cards { display: grid; grid-template-columns: 1fr; gap: var(--space-4); align-items: stretch; }
+    .cards-2 { grid-template-columns: 1.4fr 1fr; }
+    .cards-3 { grid-template-columns: 1.4fr 1fr 1fr; }
+    .cards-4 { grid-template-columns: 1.3fr 1fr 1fr 1fr; }
+    .option { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4);
+              border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+    .option-top { border: 2px solid var(--green-600); background: var(--green-50); padding: var(--space-5); }
+    .option-usual:not(.option-top) { border-color: var(--green-200); }
+    .option-tags { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+    .usual-pill { background: var(--green-100); color: var(--green-800); }
+    .option-company { font-weight: 700; font-size: var(--text-lg); }
+    .option-top .option-company { color: var(--green-900); }
+    .option-total { display: grid; gap: 2px; margin: var(--space-2) 0; }
+    .option-top .option-total .figure { color: var(--green-800); }
+    .more { color: var(--amber-700); }
+    .option-dl { font-size: var(--text-sm); }
+    .option-foot { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-top: auto; padding-top: var(--space-3); }
+    .option-foot .btn { margin-left: auto; }
+    .mini { font-size: 11px; line-height: 18px; padding: 0 6px; margin-left: 4px; }
+    .rest { margin-top: var(--space-5); border-top: 1px solid var(--gray-100); }
+    @media (max-width: 960px) { .layout, .cards { grid-template-columns: 1fr; } }
   `],
 })
 export class StockItemComponent implements OnInit {
@@ -202,10 +339,49 @@ export class StockItemComponent implements OnInit {
   formError = signal<string | null>(null);
   formOk = signal<string | null>(null);
 
+  // D39: restocking comparison
+  comparing = signal(false);
+  comparison = signal<Comparison | null>(null);
+  compareError = signal<string | null>(null);
+  ordering = signal<ComparisonOption | null>(null);
+  items = signal<StockItem[]>([]);
+  // the cheapest option that can supply all of it
+  recommended = computed(() => {
+    const first = this.comparison()?.options[0];
+    return first && first.canFulfil ? first : null;
+  });
+  usual = computed(() => this.comparison()?.options.find(o => o.orderedLastTime) ?? null);
+  // the top three, plus the usual supplier pinned beside them when they rank lower
+  cards = computed(() => {
+    const opts = this.comparison()?.options ?? [];
+    const top = opts.slice(0, 3);
+    const u = this.usual();
+    return u && !top.includes(u) ? [...top, u] : top;
+  });
+  rest = computed(() => (this.comparison()?.options ?? []).filter(o => !this.cards().includes(o)));
+  rank = (o: ComparisonOption) => (this.comparison()?.options.indexOf(o) ?? 0) + 1;
+
   plural = plural;
   typeTone = (t: string) => 'type-' + t.toLowerCase();
 
-  ngOnInit() { this.load(); }
+  ngOnInit() {
+    this.load();
+    this.api.stock().subscribe({ next: i => this.items.set(i) });
+  }
+
+  toggleCompare() {
+    this.comparing.set(!this.comparing());
+    if (this.comparing()) this.compare();
+  }
+
+  // priced for the forecast's quantity once it has loaded
+  compare() {
+    this.compareError.set(null);
+    this.api.compare(this.itemId, this.prediction()?.recommendedQuantity || null).subscribe({
+      next: c => this.comparison.set(c),
+      error: err => this.compareError.set(problemText(err)),
+    });
+  }
 
   private get itemId() { return Number(this.id); }
 
@@ -222,7 +398,7 @@ export class StockItemComponent implements OnInit {
   predict() {
     this.predicting.set(true);
     this.api.predict(this.itemId).subscribe({
-      next: p => { this.prediction.set(p); this.predicting.set(false); },
+      next: p => { this.prediction.set(p); this.predicting.set(false); if (this.comparing()) this.compare(); },
       error: err => { if (err.status !== 404) this.error.set(problemText(err)); this.predicting.set(false); },
     });
   }

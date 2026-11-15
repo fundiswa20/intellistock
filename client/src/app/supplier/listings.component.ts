@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { CATEGORIES, InventoryApi, ListingInput, MyListing, problemText } from '../api';
+import { CATEGORIES, InventoryApi, LOW_PACKS, ListingInput, MyListing, matchesSearch, problemText } from '../api';
 import { EmptyStateComponent } from '../shared/empty-state.component';
 import { IconComponent } from '../shared/icon.component';
 import { MoneyPipe } from '../shared/money.pipe';
@@ -52,7 +52,11 @@ const BLANK: ListingInput = {
                 </tr>
               </thead>
               <tbody>
-                @for (l of shown(); track l.supplierListingId) {
+                @for (g of groups(); track g.title) {
+                  @if (groups().length > 1 || g.low) {
+                    <tr class="group" [class.group-low]="g.low"><td colspan="9">{{ g.title }} <span class="count">{{ g.rows.length }}</span></td></tr>
+                  }
+                  @for (l of g.rows; track l.supplierListingId) {
                   <tr>
                     <td><div class="cell-title">{{ l.productName }}</div><div class="cell-sub">{{ l.category }} · updated {{ l.updatedAt | date: 'd MMM' }}</div></td>
                     <td class="num secondary">{{ l.packSize }}</td>
@@ -60,7 +64,7 @@ const BLANK: ListingInput = {
                     <td class="num secondary">{{ l.unitPrice | money }}</td>
                     <td class="num">
                       @if (l.availableQuantity === 0) { <span class="pill pill-danger">Out of stock</span> }
-                      @else { <span class="qty" [class.figure-danger]="l.availableQuantity <= 5">{{ l.availableQuantity }}</span> <span class="cell-sub">packs</span> }
+                      @else { <span class="qty" [class.figure-danger]="isLow(l)">{{ l.availableQuantity }}</span> <span class="cell-sub">packs</span> }
                     </td>
                     <td class="num secondary nowrap">{{ l.leadTimeDays }} {{ l.leadTimeDays === 1 ? 'day' : 'days' }}</td>
                     <td class="num secondary">{{ l.deliveryCost | money }}</td>
@@ -70,6 +74,7 @@ const BLANK: ListingInput = {
                     </td>
                     <td class="num"><button class="btn btn-secondary btn-sm" (click)="edit(l)"><app-icon name="edit" [size]="14" /> Edit</button></td>
                   </tr>
+                  }
                 }
               </tbody>
             </table>
@@ -148,6 +153,10 @@ const BLANK: ListingInput = {
   styles: [`
     .toolbar { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3);
                flex-wrap: wrap; padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--gray-100); }
+    .group td { padding: var(--space-2) var(--space-5); background: var(--gray-50); font-size: var(--text-xs);
+                font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+    .group-low td { background: var(--red-50); color: var(--red-700); }
+    .group .count { margin-left: var(--space-2); font-weight: 600; }
     .check { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3) var(--space-4);
              border-radius: var(--radius); background: var(--gray-50); cursor: pointer; line-height: 1.4; }
     .check input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--green-700); }
@@ -170,9 +179,16 @@ export class ListingsComponent implements OnInit {
   formError = signal<string | null>(null);
 
   activeCount = computed(() => this.listings().filter(l => l.isActive).length);
-  shown = computed(() => {
-    const q = this.query().trim().toLowerCase();
-    return this.listings().filter(l => !q || l.productName.toLowerCase().includes(q));
+  shown = computed(() => this.listings().filter(l => matchesSearch(this.query(), l.productName)));
+  // listings at or below LOW_PACKS first, fewest packs first, like the owner's low stock
+  isLow = (l: MyListing) => l.availableQuantity <= LOW_PACKS;
+  groups = computed(() => {
+    const low = this.shown().filter(this.isLow).sort((a, b) => a.availableQuantity - b.availableQuantity);
+    const rest = this.shown().filter(l => !this.isLow(l));
+    return [
+      { title: 'Needs restocking', low: true, rows: low },
+      { title: 'All other listings', low: false, rows: rest },
+    ].filter(g => g.rows.length);
   });
 
   ngOnInit() { this.load(); }

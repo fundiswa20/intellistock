@@ -81,6 +81,38 @@ export interface Listing {
   availableQuantity: number;
   deliveryCost: number;
   updatedAt: string;
+  inYourArea: boolean;   // the owner's location names one of the supplier's delivery areas (D39)
+}
+
+// D39: one supplier's offer when restocking an item, priced for the units wanted
+export interface ComparisonOption extends Listing {
+  packs: number;
+  units: number;
+  subtotal: number;
+  total: number;
+  sameProduct: boolean;
+  orderedLastTime: boolean;
+  canFulfil: boolean;
+}
+
+export interface LastSupplier {
+  supplierId: number;
+  supplierName: string;
+  purchaseOrderId: number;
+  productName: string;
+  packs: number;
+  status: OrderStatus;
+  createdAt: string;
+  total: number;
+}
+
+export interface Comparison {
+  stockItemId: number;
+  itemName: string;
+  searchTerm: string;
+  unitsWanted: number;
+  lastSupplier: LastSupplier | null;
+  options: ComparisonOption[];   // ranked: can supply it all, same product, cheapest delivered
 }
 
 // FR-07: a listing as its supplier manages it
@@ -153,6 +185,9 @@ export interface Account {
   reliabilityScore: number | null;
 }
 
+// a supplier's listing at or below this many packs needs restocking
+export const LOW_PACKS = 5;
+
 export const CATEGORIES = ['Groceries', 'Clothing', 'Electronics', 'Furniture', 'Toys'];
 
 @Injectable({ providedIn: 'root' })
@@ -176,6 +211,12 @@ export class InventoryApi {
   // ---- owner: suppliers and orders (FR-06, FR-10)
   listings(q = '') {
     return this.http.get<Listing[]>(`${API_URL}/api/listings`, { params: q ? { q } : {} });
+  }
+  compare(itemId: number, units: number | null) {
+    return this.http.get<Comparison>(`${API_URL}/api/stock/${itemId}/suppliers`, { params: units ? { units } : {} });
+  }
+  lastSupplier(stockItemId: number) {
+    return this.http.get<LastSupplier | null>(`${API_URL}/api/orders/last-supplier`, { params: { stockItemId } });
   }
   orders() { return this.http.get<Order[]>(`${API_URL}/api/orders`); }
   order(id: number) { return this.http.get<Order>(`${API_URL}/api/orders/${id}`); }
@@ -222,6 +263,14 @@ export function orderTone(status: OrderStatus): string {
     Placed: 'pill-accent', Confirmed: 'pill-success', Dispatched: 'pill-success',
     Delivered: 'pill-solid', Declined: 'pill-danger', Cancelled: 'pill-muted',
   } as Record<OrderStatus, string>)[status];
+}
+
+// FR-06 search: every word typed appears somewhere in the text, ignoring case ("bread" finds
+// "Sasko White Bread 700g", "white bread" too)
+export function matchesSearch(query: string, ...texts: string[]): boolean {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const hay = texts.join(' ').toLowerCase();
+  return words.every(w => hay.includes(w));
 }
 
 export function isOpenOrder(o: Order) { return o.status === 'Placed' || o.status === 'Confirmed' || o.status === 'Dispatched'; }

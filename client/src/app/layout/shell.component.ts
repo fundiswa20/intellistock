@@ -1,10 +1,12 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
+import { InventoryApi, LOW_PACKS } from '../api';
 import { AuthService } from '../auth';
 import { IconComponent } from '../shared/icon.component';
 
 interface NavItem { label: string; link: string; icon: string; exact?: boolean; }
+interface Badge { count?: number; label: string; }
 
 const OWNER_NAV: NavItem[] = [
   { label: 'Dashboard', link: '/dashboard', icon: 'dashboard' },
@@ -41,6 +43,10 @@ const SUPPLIER_NAV: NavItem[] = [
             <a class="nav-item" [routerLink]="item.link" routerLinkActive="active" (click)="navOpen.set(false)">
               <app-icon [name]="item.icon" />
               <span>{{ item.label }}</span>
+              @if (badges()[item.link]; as b) {
+                @if (b.count) { <span class="badge" [attr.aria-label]="b.label">{{ b.count }}</span> }
+                @else { <span class="dot" [attr.aria-label]="b.label" role="img"></span> }
+              }
             </a>
           }
         </nav>
@@ -102,6 +108,11 @@ const SUPPLIER_NAV: NavItem[] = [
       content: ""; position: absolute; left: calc(-1 * var(--space-3)); top: 8px; bottom: 8px; width: 3px;
       border-radius: 0 3px 3px 0; background: var(--green-200);
     }
+    .badge { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
+             display: inline-grid; place-items: center; background: var(--red-600); color: #fff;
+             font-size: 11px; font-weight: 700; line-height: 1; }
+    .dot { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--red-600);
+           box-shadow: 0 0 0 2px var(--green-900); }
     .org { margin-top: auto; padding: var(--space-4) var(--space-3) 0; border-top: 1px solid rgba(255,255,255,.1); }
     .org-name { font-size: var(--text-sm); color: rgba(255,255,255,.7); font-weight: 500; }
 
@@ -142,7 +153,42 @@ export class ShellComponent {
   initials = computed(() =>
     (this.auth.user()?.fullName ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join(''));
 
+  // what needs the user's attention, per nav link; refreshed on every navigation, no realtime
+  badges = signal<Record<string, Badge>>({});
+  private api = inject(InventoryApi);
+
   constructor() {
-    inject(Router).events.pipe(filter(e => e instanceof NavigationEnd)).subscribe(() => this.navOpen.set(false));
+    inject(Router).events.pipe(filter(e => e instanceof NavigationEnd)).subscribe(() => {
+      this.navOpen.set(false);
+      this.refreshBadges();
+    });
+  }
+
+  private set(link: string, badge: Badge | null) {
+    const next = { ...this.badges() };
+    if (badge) next[link] = badge; else delete next[link];
+    this.badges.set(next);
+  }
+
+  private refreshBadges() {
+    const quiet = { error: () => {} };
+    if (this.auth.role() === 'Supplier') {
+      this.api.supplierOrders().subscribe({ ...quiet, next: o => {
+        const n = o.filter(x => x.status === 'Placed').length;
+        this.set('/supplier/orders', n ? { label: `${n} orders to confirm` } : null);
+      } });
+      this.api.myListings().subscribe({ ...quiet, next: l => {
+        const n = l.filter(x => x.isActive && x.availableQuantity <= LOW_PACKS).length;
+        this.set('/supplier/listings', n ? { label: `${n} listings low on stock` } : null);
+      } });
+    } else if (this.auth.role() === 'BusinessOwner') {
+      this.api.alerts('open').subscribe({ ...quiet, next: a =>
+        this.set('/alerts', a.length ? { count: a.length, label: `${a.length} open alerts` } : null) });
+      // orders waiting on the owner: delivered and not yet received into stock
+      this.api.orders().subscribe({ ...quiet, next: o => {
+        const n = o.filter(x => x.canReceive).length;
+        this.set('/orders', n ? { label: `${n} orders to receive` } : null);
+      } });
+    }
   }
 }

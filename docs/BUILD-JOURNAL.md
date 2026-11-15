@@ -460,6 +460,33 @@ columns, every login would fail on an unknown column. The columns were added to 
 (with CHECK constraints) and to the seed generator rather than removed from the model,
 because the supplier interface uses them.
 
+**D39 — Restocking compares suppliers on the item page.** _(Sun 15 Nov)_
+- *Where:* "Order from a supplier" on a stock item now opens the comparison inline
+  (`GET /api/stock/{id}/suppliers?units=`), priced for the forecast quantity, or the reorder
+  level when the forecast says none is needed. The owner decides and orders without leaving
+  the item; the order dialog is shared with the Suppliers page.
+- *Ranking:* listings that can supply every pack first, then the exact product before similar
+  ones, then cheapest total delivered cost (packs × pack price + delivery). The top three are
+  cards, the first dominant as "Recommended"; the rest are a table with the difference from it.
+- *Usual supplier:* `GET /api/orders/last-supplier` returns the supplier of the owner's most
+  recent order for an item or product name; declined and cancelled orders do not count. That
+  supplier is marked "You ordered from them last time" and pinned beside the top three even if
+  it ranks lower, with what switching would save.
+- *Matching* (`Domain/ProductMatch.cs`): a listing matches an item when it contains the item's
+  name, or a word starting with the item's product word — the last word before the first size
+  ("Clover Long Life Milk 1L" → milk, "Joko Tea 100 bags" → tea). Case-insensitive. The
+  Suppliers page search is a case-insensitive substring match on every word typed.
+- *Area:* a supplier's delivery area is a comma-separated list of places; the owner is "In your
+  area" when their location names one of them. Out-of-area suppliers are shown, marked amber,
+  never hidden. This is a text match, not geography: Kasi's "Cape Flats" does not match
+  "Khayelitsha".
+- *Receiving stays manual* (D37): a supplier marking an order Delivered does not change stock;
+  the owner confirms receipt, so a supplier cannot inflate the owner's stock figures.
+- *Sidebar:* Alerts shows the open-alert count; Orders a dot when a delivered order is waiting to
+  be received (owner) or an order is waiting to be confirmed (supplier); Listings a dot when an
+  active listing is at or below 5 packs. Refreshed on each navigation, no realtime. The
+  supplier's listings put those under "Needs restocking", fewest packs first.
+
 ---
 
 ## 2a. Known limitations (for Assignment 3 Q5.4 and Assignment 4 Q4.3)

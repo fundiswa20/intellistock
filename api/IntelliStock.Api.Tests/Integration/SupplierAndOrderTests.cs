@@ -200,6 +200,43 @@ public class SupplierAndOrderTests(ApiFactory api)
         Assert.Equal(HttpStatusCode.NotFound, (await sipho.PostAsync($"/api/orders/{id}/cancel", null)).StatusCode);
     }
 
+    // ------------------------------------------------------------------ D39 restocking comparison
+
+    [Fact]
+    public async Task Restocking_an_item_compares_every_supplier_of_it_cheapest_delivered_first()
+    {
+        var owner = await api.LoginAs(Owner);
+        // item 8 is Nomvula's Clover Long Life Milk 1L; the seed lists it at all three suppliers,
+        // and her last milk order (seed order 5) was from Ubuntu Wholesalers (3)
+        var r = await Json(await owner.GetAsync("/api/stock/8/suppliers?units=24"));
+        Assert.Equal("milk", r.GetProperty("searchTerm").GetString());
+        Assert.Equal(3, r.GetProperty("lastSupplier").GetProperty("supplierId").GetInt32());
+
+        var options = r.GetProperty("options").EnumerateArray().ToList();
+        var ubuntu = options.Single(o => o.GetProperty("supplierListingId").GetInt32() == 6);
+        var kasi = options.Single(o => o.GetProperty("supplierListingId").GetInt32() == 25);
+        Assert.True(options.IndexOf(kasi) < options.IndexOf(ubuntu));   // R176.92 a pack against R196.22
+        Assert.Equal(2, ubuntu.GetProperty("packs").GetInt32());        // 24 units in packs of 12
+        Assert.Equal(2 * 196.22m + ubuntu.GetProperty("deliveryCost").GetDecimal(), ubuntu.GetProperty("total").GetDecimal());
+        Assert.True(ubuntu.GetProperty("orderedLastTime").GetBoolean());
+        Assert.False(kasi.GetProperty("orderedLastTime").GetBoolean());
+        Assert.True(ubuntu.GetProperty("inYourArea").GetBoolean());     // delivers to Khayelitsha
+        Assert.False(kasi.GetProperty("inYourArea").GetBoolean());
+    }
+
+    [Fact]
+    public async Task The_last_supplier_is_found_by_partial_product_name_and_is_empty_when_never_ordered()
+    {
+        var owner = await api.LoginAs(Owner);
+        var milk = await owner.GetAsync("/api/orders/last-supplier?product=MILK");
+        Assert.Equal(HttpStatusCode.OK, milk.StatusCode);
+        Assert.Equal(3, (await Json(milk)).GetProperty("supplierId").GetInt32());
+
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.GetAsync("/api/orders/last-supplier?product=paraffin")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync("/api/orders/last-supplier?stockItemId=101")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync("/api/stock/101/suppliers")).StatusCode);
+    }
+
     // ------------------------------------------------------------------ FR-05 resolved alerts
 
     [Fact]

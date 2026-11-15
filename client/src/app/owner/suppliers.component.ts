@@ -1,18 +1,19 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { PercentPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
-import { InventoryApi, Listing, StockItem, problemText } from '../api';
+import { ActivatedRoute } from '@angular/router';
+import { InventoryApi, Listing, StockItem, matchesSearch, problemText } from '../api';
 import { EmptyStateComponent } from '../shared/empty-state.component';
 import { IconComponent } from '../shared/icon.component';
 import { MoneyPipe } from '../shared/money.pipe';
+import { OrderDialogComponent } from '../shared/order-dialog.component';
 
 // FR-06: every supplier's active listings, cheapest per unit first, and placing an order (FR-10).
 // Opened from a stock item as /suppliers?q=<name>&item=<id>&qty=<recommended units>.
 @Component({
   selector: 'app-suppliers',
   standalone: true,
-  imports: [FormsModule, PercentPipe, MoneyPipe, EmptyStateComponent, IconComponent],
+  imports: [FormsModule, PercentPipe, MoneyPipe, EmptyStateComponent, IconComponent, OrderDialogComponent],
   template: `
     <div class="page-head">
       <div>
@@ -51,6 +52,8 @@ import { MoneyPipe } from '../shared/money.pipe';
                   <td>
                     <div class="strong">{{ l.supplierName }}</div>
                     <div class="cell-sub">{{ l.reliabilityScore | percent }} on time · {{ l.deliveryArea || 'Area not given' }}</div>
+                    <span class="pill area" [class.pill-success]="l.inYourArea" [class.pill-accent]="!l.inYourArea">
+                      {{ l.inYourArea ? 'In your area' : 'Outside your area' }}</span>
                   </td>
                   <td class="num secondary">{{ l.packSize }}</td>
                   <td class="num">{{ l.packPrice | money }}</td>
@@ -79,105 +82,35 @@ import { MoneyPipe } from '../shared/money.pipe';
       }
     </div>
 
-    <!-- place an order -->
     @if (ordering(); as l) {
-      <div class="modal-backdrop" (click)="ordering.set(null)">
-        <form class="modal" (click)="$event.stopPropagation()" (ngSubmit)="place(l)" role="dialog" aria-labelledby="order-title">
-          <div class="modal-head">
-            <div>
-              <h2 id="order-title">Order {{ l.productName }}</h2>
-              <p class="muted small">from {{ l.supplierName }} · packs of {{ l.packSize }} · {{ l.leadTimeDays }}-day lead time</p>
-            </div>
-            <button type="button" class="icon-btn" (click)="ordering.set(null)" aria-label="Close"><app-icon name="x" /></button>
-          </div>
-          <div class="modal-body">
-            <div class="form-grid">
-              <div class="field">
-                <label for="packs">Packs</label>
-                <input class="input" id="packs" name="packs" type="number" min="1" [max]="l.availableQuantity"
-                       [(ngModel)]="packs" required />
-                <span class="hint">{{ l.availableQuantity }} available · {{ (packs || 0) * l.packSize }} units</span>
-              </div>
-              <div class="field">
-                <label for="item">Book into stock item</label>
-                <select class="input" id="item" name="item" [(ngModel)]="stockItemId">
-                  <option [ngValue]="null">Not linked</option>
-                  @for (i of items(); track i.stockItemId) { <option [ngValue]="i.stockItemId">{{ i.name }}</option> }
-                </select>
-                <span class="hint">On delivery, the units are added to this item.</span>
-              </div>
-              <div class="field span-2">
-                <label for="note">Note to the supplier <span class="muted">(optional)</span></label>
-                <input class="input" id="note" name="note" [(ngModel)]="note" maxlength="255" />
-              </div>
-            </div>
-
-            @if (suggestedPacks(); as s) {
-              <div class="notice notice-accent hint-box">
-                <app-icon name="trend" [size]="16" />
-                <span>The forecast recommends {{ recommendedUnits }} units: {{ s }} {{ s === 1 ? 'pack' : 'packs' }} of {{ l.packSize }}.</span>
-              </div>
-            }
-
-            <div class="summary">
-              <dl class="dl">
-                <dt>{{ packs || 0 }} × {{ l.packPrice | money }}</dt><dd>{{ (packs || 0) * l.packPrice | money }}</dd>
-                <dt>Delivery</dt><dd>{{ l.deliveryCost | money }}</dd>
-              </dl>
-              <div class="total">
-                <span class="label">Delivered cost</span>
-                <span class="figure">{{ (packs || 0) * l.packPrice + l.deliveryCost | money }}</span>
-              </div>
-            </div>
-
-            @if (orderError()) { <div class="notice notice-error" style="margin:0">{{ orderError() }}</div> }
-          </div>
-          <div class="modal-foot">
-            <button type="button" class="btn btn-secondary" (click)="ordering.set(null)">Cancel</button>
-            <button type="submit" class="btn btn-primary" [disabled]="placing() || !packs || packs < 1 || packs > l.availableQuantity">
-              {{ placing() ? 'Placing order…' : 'Place order' }}
-            </button>
-          </div>
-        </form>
-      </div>
+      <app-order-dialog [listing]="l" [items]="items()" [stockItemId]="linkFor(l)"
+                        [recommendedUnits]="recommendedUnits" (closed)="ordering.set(null)" />
     }
   `,
   styles: [`
     .toolbar { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3);
                flex-wrap: wrap; padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--gray-100); }
     .best { margin-top: 2px; font-size: 11px; padding: 0 8px; line-height: 18px; }
-    .summary { display: grid; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius); background: var(--gray-50); }
-    .total { display: flex; justify-content: space-between; align-items: baseline; padding-top: var(--space-3);
-             border-top: 1px solid var(--gray-200); }
-    .hint-box { margin: 0; align-items: center; }
+    .area { margin-top: var(--space-1); font-size: 11px; line-height: 18px; padding: 0 8px; }
   `],
 })
 export class SuppliersComponent implements OnInit {
   private api = inject(InventoryApi);
   private route = inject(ActivatedRoute);
-  private router = inject(Router);
 
   listings = signal<Listing[]>([]);
   items = signal<StockItem[]>([]);
   loading = signal(true);
   error = signal<string | null>(null);
   query = signal('');
-
   ordering = signal<Listing | null>(null);
-  packs: number | null = 1;
-  stockItemId: number | null = null;
-  note = '';
-  placing = signal(false);
-  orderError = signal<string | null>(null);
 
   // from a stock item page
   private linkedItem: number | null = null;
   recommendedUnits: number | null = null;
 
-  shown = computed(() => {
-    const q = this.query().trim().toLowerCase();
-    return this.listings().filter(l => !q || l.productName.toLowerCase().includes(q) || l.supplierName.toLowerCase().includes(q));
-  });
+  // partial, case-insensitive: "bread" finds "Albany Brown Bread 700g" (D39)
+  shown = computed(() => this.listings().filter(l => matchesSearch(this.query(), l.productName, l.supplierName)));
   supplierCount = computed(() => new Set(this.shown().map(l => l.supplierId)).size);
   // the cheapest per-unit listing of each product, where more than one supplier lists it
   cheapest = computed(() => {
@@ -200,30 +133,11 @@ export class SuppliersComponent implements OnInit {
     this.api.stock().subscribe({ next: i => this.items.set(i) });
   }
 
-  suggestedPacks() {
-    const l = this.ordering();
-    return l && this.recommendedUnits ? Math.max(1, Math.ceil(this.recommendedUnits / l.packSize)) : null;
-  }
+  startOrder(l: Listing) { this.ordering.set(l); }
 
-  startOrder(l: Listing) {
-    this.orderError.set(null);
-    this.note = '';
-    // link the item this page was opened from, otherwise the owner's item with the same name
-    this.stockItemId = this.linkedItem
+  // link the item this page was opened from, otherwise the owner's item with the same name
+  linkFor(l: Listing) {
+    return this.linkedItem
       ?? this.items().find(i => i.name.toLowerCase() === l.productName.toLowerCase())?.stockItemId ?? null;
-    this.ordering.set(l);
-    this.packs = Math.min(this.suggestedPacks() ?? 1, l.availableQuantity);
-  }
-
-  place(l: Listing) {
-    this.placing.set(true);
-    this.orderError.set(null);
-    this.api.placeOrder({
-      supplierListingId: l.supplierListingId, packs: Number(this.packs), stockItemId: this.stockItemId,
-      note: this.note.trim() || null,
-    }).subscribe({
-      next: o => this.router.navigate(['/orders', o.purchaseOrderId], { queryParams: { placed: 1 } }),
-      error: err => { this.orderError.set(problemText(err)); this.placing.set(false); },
-    });
   }
 }

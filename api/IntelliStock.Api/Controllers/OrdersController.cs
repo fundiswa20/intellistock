@@ -38,6 +38,7 @@ public class OrdersController(InventoryRepository db) : ControllerBase
         if (!string.IsNullOrWhiteSpace(q))
             query = query.Where(x => x.l.ProductName.Contains(q.Trim()) || x.s.CompanyName.Contains(q.Trim()));
         var rows = await query.ToListAsync();
+        var location = await MyLocation();
         return Ok(rows
             .OrderBy(x => x.l.ProductName).ThenBy(x => x.l.PackPrice / x.l.PackSize)
             .Select(x => new
@@ -46,8 +47,99 @@ public class OrdersController(InventoryRepository db) : ControllerBase
                 x.s.ReliabilityScore, x.l.ProductName, x.l.Category, x.l.PackSize, x.l.PackPrice,
                 unitPrice = Math.Round(x.l.PackPrice / x.l.PackSize, 2),
                 x.l.LeadTimeDays, x.l.AvailableQuantity, x.l.DeliveryCost, x.l.UpdatedAt,
+                inYourArea = ProductMatch.InArea(location, x.s.DeliveryArea),
             }));
     }
+
+    // D39: the supplier of the owner's most recent order for a product - by stock item, or by a
+    // product name matched like the comparison does. Declined and cancelled orders do not count.
+    // 204 when the owner has never ordered it.
+    [HttpGet("api/orders/last-supplier")]
+    public async Task<IActionResult> LastSupplier([FromQuery] int? stockItemId, [FromQuery] string? product)
+    {
+        StockItem? item = null;
+        if (stockItemId is { } id && (item = await MyItem(id).SingleOrDefaultAsync()) is null) return NotFound();
+        var name = item?.Name ?? product?.Trim();
+        if (item is null && string.IsNullOrEmpty(name))
+            return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["product"] = ["Give a stockItemId or a product name."],
+            }));
+        var last = await LastOrderFor(item?.StockItemId, name!);
+        return last is null ? NoContent() : Ok(LastView(last));
+    }
+
+    // D39: restocking one item - every active listing of that product, with what the
+    // recommended quantity would cost delivered, ranked cheapest first
+    [HttpGet("api/stock/{id:int}/suppliers")]
+    public async Task<IActionResult> Compare(int id, [FromQuery] int? units)
+    {
+        var item = await MyItem(id).SingleOrDefaultAsync();
+        if (item is null) return NotFound();
+        var want = Math.Max(1, units ?? Math.Max(item.ReorderLevel, 1));
+        var location = await MyLocation();
+        var last = await LastOrderFor(item.StockItemId, item.Name);
+
+        var rows = await (from l in db.SupplierListings
+                          join s in db.Suppliers on l.SupplierId equals s.RegisteredUserId
+                          where l.IsActive
+                          select new { l, s }).ToListAsync();
+        var options = rows
+            .Where(x => ProductMatch.Matches(item.Name, x.l.ProductName))
+            .Select(x =>
+            {
+                var packs = (int)Math.Ceiling(want / (double)x.l.PackSize);
+                return new
+                {
+                    x.l.SupplierListingId, x.l.SupplierId, supplierName = x.s.CompanyName, x.s.DeliveryArea,
+                    x.s.ReliabilityScore, x.l.ProductName, x.l.Category, x.l.PackSize, x.l.PackPrice,
+                    unitPrice = Math.Round(x.l.PackPrice / x.l.PackSize, 2),
+                    x.l.LeadTimeDays, x.l.AvailableQuantity, x.l.DeliveryCost, x.l.UpdatedAt,
+                    packs, units = packs * x.l.PackSize,
+                    subtotal = packs * x.l.PackPrice,
+                    total = OrderRules.Total(packs, x.l.PackPrice, x.l.DeliveryCost),
+                    inYourArea = ProductMatch.InArea(location, x.s.DeliveryArea),
+                    sameProduct = x.l.ProductName.Contains(item.Name, StringComparison.OrdinalIgnoreCase),
+                    orderedLastTime = last?.o.SupplierId == x.l.SupplierId,
+                    canFulfil = x.l.AvailableQuantity >= packs,
+                };
+            })
+            // the ones that can supply it all, then the exact product before similar ones, then cheapest delivered
+            .OrderByDescending(o => o.canFulfil).ThenByDescending(o => o.sameProduct)
+            .ThenBy(o => o.total).ThenBy(o => o.LeadTimeDays)
+            .ToList();
+
+        return Ok(new
+        {
+            stockItemId = item.StockItemId, itemName = item.Name, searchTerm = ProductMatch.KeyTerm(item.Name),
+            unitsWanted = want,
+            lastSupplier = last is null ? null : LastView(last),
+            options,
+        });
+    }
+
+    private async Task<string?> MyLocation() =>
+        await db.BusinessOwners.Where(o => o.RegisteredUserId == OwnerId).Select(o => o.Location).SingleOrDefaultAsync();
+
+    private async Task<LastOrder?> LastOrderFor(int? stockItemId, string productName)
+    {
+        var orders = await (from o in db.PurchaseOrders
+                            join s in db.Suppliers on o.SupplierId equals s.RegisteredUserId
+                            where o.BusinessOwnerId == OwnerId && o.Status != "Declined" && o.Status != "Cancelled"
+                            orderby o.CreatedAt descending, o.PurchaseOrderId descending
+                            select new LastOrder(o, s)).ToListAsync();
+        return orders.FirstOrDefault(x =>
+            (stockItemId != null && x.o.StockItemId == stockItemId) || ProductMatch.Matches(productName, x.o.ProductName));
+    }
+
+    private static object LastView(LastOrder x) => new
+    {
+        supplierId = x.s.RegisteredUserId, supplierName = x.s.CompanyName,
+        x.o.PurchaseOrderId, x.o.ProductName, x.o.Packs, x.o.Status, x.o.CreatedAt,
+        total = OrderRules.Total(x.o.Packs, x.o.PackPrice, x.o.DeliveryCost),
+    };
+
+    private record LastOrder(PurchaseOrder o, Supplier s);
 
     // ------------------------------------------------------------------ FR-10 orders
 
