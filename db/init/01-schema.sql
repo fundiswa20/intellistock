@@ -12,7 +12,8 @@ USE intellistock;
 
 -- ---------------------------------------------------------------- users
 
--- FR-01 / FR-02: users are seeded; there is no registration UI (FR-01 Partial)
+-- FR-01 / FR-02: users register through POST /api/auth/register (owners and suppliers);
+-- the seed adds the demo accounts
 CREATE TABLE RegisteredUser (
     RegisteredUserId  INT           NOT NULL AUTO_INCREMENT,
     Email             VARCHAR(255)  NOT NULL,
@@ -35,13 +36,16 @@ CREATE TABLE BusinessOwner (
         REFERENCES RegisteredUser (RegisteredUserId) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- FR-06 / FR-07: supplier data is seeded; no supplier interface (Partial)
+-- FR-06 / FR-07: suppliers manage their own listings and orders (D37).
+-- ReliabilityScore: share of past orders delivered on time, 0.00 to 1.00.
 CREATE TABLE Supplier (
     RegisteredUserId  INT           NOT NULL,
     CompanyName       VARCHAR(120)  NOT NULL,
     Phone             VARCHAR(20)   NULL,
     DeliveryArea      VARCHAR(120)  NULL,
+    ReliabilityScore  DECIMAL(3,2)  NOT NULL DEFAULT 0.00,
     PRIMARY KEY (RegisteredUserId),
+    CONSTRAINT CK_Supplier_Reliability CHECK (ReliabilityScore BETWEEN 0 AND 1),
     CONSTRAINT FK_Supplier_RegisteredUser FOREIGN KEY (RegisteredUserId)
         REFERENCES RegisteredUser (RegisteredUserId) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -161,7 +165,9 @@ CREATE TABLE ReorderPrediction (
 
 -- ---------------------------------------------------------------- supplier listings
 
--- FR-06 / FR-07: seeded directly (Partial)
+-- FR-06 / FR-07: a supplier's price list. AvailableQuantity is in packs; DeliveryCost is
+-- a flat fee per order. IsActive = 0 hides a listing from owners without deleting it,
+-- because orders keep pointing at it.
 CREATE TABLE SupplierListing (
     SupplierListingId INT            NOT NULL AUTO_INCREMENT,
     SupplierId        INT            NOT NULL,
@@ -170,10 +176,56 @@ CREATE TABLE SupplierListing (
     PackSize          INT            NOT NULL DEFAULT 1,
     PackPrice         DECIMAL(10,2)  NOT NULL,
     LeadTimeDays      INT            NOT NULL DEFAULT 1,
+    IsActive          TINYINT(1)     NOT NULL DEFAULT 1,
+    AvailableQuantity INT            NOT NULL DEFAULT 0,
+    DeliveryCost      DECIMAL(10,2)  NOT NULL DEFAULT 0.00,
     UpdatedAt         DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (SupplierListingId),
     KEY IX_SupplierListing_Product (ProductName),
     CONSTRAINT FK_SupplierListing_Supplier FOREIGN KEY (SupplierId)
         REFERENCES Supplier (RegisteredUserId),
-    CONSTRAINT CK_SupplierListing CHECK (PackSize > 0 AND PackPrice >= 0 AND LeadTimeDays >= 0)
+    CONSTRAINT CK_SupplierListing CHECK (PackSize > 0 AND PackPrice >= 0 AND LeadTimeDays >= 0
+                                         AND AvailableQuantity >= 0 AND DeliveryCost >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ---------------------------------------------------------------- orders
+
+-- FR-10: an owner orders whole packs of one listing from one supplier. Product, pack size,
+-- prices and delivery fee are copied from the listing when the order is placed, so a later
+-- price change does not rewrite an order. Status moves Placed -> Confirmed -> Dispatched ->
+-- Delivered; the supplier may decline and the owner may cancel while it is still Placed.
+-- ReceivedAt is set when the owner books the delivery into stock (a Restock movement).
+CREATE TABLE PurchaseOrder (
+    PurchaseOrderId   INT            NOT NULL AUTO_INCREMENT,
+    BusinessOwnerId   INT            NOT NULL,
+    SupplierId        INT            NOT NULL,
+    SupplierListingId INT            NOT NULL,
+    StockItemId       INT            NULL,
+    ProductName       VARCHAR(120)   NOT NULL,
+    PackSize          INT            NOT NULL,
+    PackPrice         DECIMAL(10,2)  NOT NULL,
+    Packs             INT            NOT NULL,
+    DeliveryCost      DECIMAL(10,2)  NOT NULL DEFAULT 0.00,
+    Status            VARCHAR(20)    NOT NULL DEFAULT 'Placed',
+    Note              VARCHAR(255)   NULL,
+    CreatedAt         DATETIME       NOT NULL,
+    ConfirmedAt       DATETIME       NULL,
+    DispatchedAt      DATETIME       NULL,
+    DeliveredAt       DATETIME       NULL,
+    ClosedAt          DATETIME       NULL,   -- declined or cancelled
+    ReceivedAt        DATETIME       NULL,
+    PRIMARY KEY (PurchaseOrderId),
+    KEY IX_PurchaseOrder_Owner (BusinessOwnerId, CreatedAt),
+    KEY IX_PurchaseOrder_Supplier (SupplierId, CreatedAt),
+    CONSTRAINT FK_PurchaseOrder_Owner FOREIGN KEY (BusinessOwnerId)
+        REFERENCES BusinessOwner (RegisteredUserId),
+    CONSTRAINT FK_PurchaseOrder_Supplier FOREIGN KEY (SupplierId)
+        REFERENCES Supplier (RegisteredUserId),
+    CONSTRAINT FK_PurchaseOrder_Listing FOREIGN KEY (SupplierListingId)
+        REFERENCES SupplierListing (SupplierListingId),
+    CONSTRAINT FK_PurchaseOrder_StockItem FOREIGN KEY (StockItemId)
+        REFERENCES StockItem (StockItemId),
+    CONSTRAINT CK_PurchaseOrder_Packs CHECK (Packs > 0 AND PackSize > 0),
+    CONSTRAINT CK_PurchaseOrder_Status CHECK (Status IN
+        ('Placed', 'Confirmed', 'Dispatched', 'Delivered', 'Declined', 'Cancelled'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

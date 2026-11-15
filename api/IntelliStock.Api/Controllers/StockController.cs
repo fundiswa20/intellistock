@@ -77,9 +77,9 @@ public class StockController(InventoryRepository db, IHttpClientFactory http, IL
         // FR-04: opening stock goes through the transaction log like any other movement,
         // so QuantityOnHand always equals the sum of the log
         if (req.OpeningQuantity > 0)
-            await ApplyMovement(item, "Adjustment", req.OpeningQuantity, "Opening stock count", now);
+            await StockLedger.ApplyMovement(db, item, "Adjustment", req.OpeningQuantity, "Opening stock count", now, OwnerId);
         else
-            await ApplyAlertRule(item, now);   // an item created with 0 stock is already low
+            await StockLedger.ApplyAlertRule(db, item, now);   // an item created with 0 stock is already low
         await db.SaveChangesAsync();
         await tx.CommitAsync();
 
@@ -100,7 +100,7 @@ public class StockController(InventoryRepository db, IHttpClientFactory http, IL
         item.ReorderLevel = req.ReorderLevel;
         item.UnitCost = req.UnitCost;
         item.SellingPrice = req.SellingPrice;
-        await ApplyAlertRule(item, Clock.Now);   // a new reorder level can raise or clear an alert
+        await StockLedger.ApplyAlertRule(db, item, Clock.Now);   // a new reorder level can raise or clear an alert
         await db.SaveChangesAsync();
         return Ok(ItemView(item));
     }
@@ -127,9 +127,7 @@ public class StockController(InventoryRepository db, IHttpClientFactory http, IL
         await using var tx = await db.Database.BeginTransactionAsync();
 
         // lock the row so two movements recorded at once cannot both read the same balance
-        var item = await db.StockItems
-            .FromSqlInterpolated($"SELECT * FROM StockItem WHERE StockItemId = {id} FOR UPDATE")
-            .SingleOrDefaultAsync();
+        var item = await StockLedger.LockItem(db, id);
         if (item is null || item.BusinessOwnerId != OwnerId || !item.IsActive) return NotFound();
 
         var (change, error) = StockRules.SignedChange(req.Type, req.Quantity, item.QuantityOnHand);
@@ -139,7 +137,7 @@ public class StockController(InventoryRepository db, IHttpClientFactory http, IL
                 : ValidationProblem(new ValidationProblemDetails(
                     new Dictionary<string, string[]> { ["quantity"] = [error] }));
 
-        var (transaction, alertAction) = await ApplyMovement(item, req.Type, change, req.Note?.Trim(), Clock.Now);
+        var (transaction, alertAction) = await StockLedger.ApplyMovement(db, item, req.Type, change, req.Note?.Trim(), Clock.Now, OwnerId);
         await db.SaveChangesAsync();
         await tx.CommitAsync();
 
@@ -170,18 +168,30 @@ public class StockController(InventoryRepository db, IHttpClientFactory http, IL
 
     // ------------------------------------------------------------------ FR-05 low-stock alerts
 
+    // ?status=open (the default, as before), resolved or all. Resolved: the latest 100.
     [HttpGet("alerts")]
-    public async Task<IActionResult> Alerts()
+    public async Task<IActionResult> Alerts([FromQuery] string status = "open")
     {
-        var rows = await (from a in db.Alerts
-                          join s in MyItems on a.StockItemId equals s.StockItemId
-                          where a.ResolvedAt == null
-                          orderby a.CreatedAt descending
-                          select new
-                          {
-                              a.AlertId, a.StockItemId, stockItemName = s.Name, a.Message,
-                              a.QuantityAtAlert, a.ReorderLevel, currentQuantity = s.QuantityOnHand, a.CreatedAt,
-                          }).ToListAsync();
+        if (status is not ("open" or "resolved" or "all"))
+            return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["status"] = ["Status must be open, resolved or all."],
+            }));
+        var query = from a in db.Alerts
+                    join s in MyItems on a.StockItemId equals s.StockItemId
+                    select new { a, s };
+        if (status == "open") query = query.Where(x => x.a.ResolvedAt == null);
+        if (status == "resolved") query = query.Where(x => x.a.ResolvedAt != null);
+        var rows = await query
+            .OrderBy(x => x.a.ResolvedAt == null ? 0 : 1)
+            .ThenByDescending(x => x.a.ResolvedAt ?? x.a.CreatedAt)
+            .Take(status == "open" ? 1000 : 100)
+            .Select(x => new
+            {
+                x.a.AlertId, x.a.StockItemId, stockItemName = x.s.Name, x.s.Unit, x.a.Message,
+                x.a.QuantityAtAlert, x.a.ReorderLevel, currentQuantity = x.s.QuantityOnHand,
+                x.a.CreatedAt, x.a.ResolvedAt,
+            }).ToListAsync();
         return Ok(rows);
     }
 
@@ -296,44 +306,6 @@ public class StockController(InventoryRepository db, IHttpClientFactory http, IL
             log.LogWarning(ex, "Model service unavailable for item {Id}", item.StockItemId);
             return new ModelResult(null, null, null, "modelUnavailable");
         }
-    }
-
-    // FR-04 + FR-05: append one movement to the log and apply the alert rule.
-    // Caller owns the database transaction and SaveChanges.
-    private async Task<(Transaction, StockRules.AlertAction)> ApplyMovement(
-        StockItem item, string type, int change, string? note, DateTime when)
-    {
-        item.QuantityOnHand += change;
-        var t = new Transaction
-        {
-            StockItemId = item.StockItemId,
-            Type = type,
-            QuantityChange = change,
-            QuantityAfter = item.QuantityOnHand,
-            OccurredAt = when,
-            RecordedByUserId = OwnerId,
-            Note = string.IsNullOrEmpty(note) ? null : note,
-        };
-        db.Transactions.Add(t);
-        return (t, await ApplyAlertRule(item, when));
-    }
-
-    private async Task<StockRules.AlertAction> ApplyAlertRule(StockItem item, DateTime when)
-    {
-        var open = await db.Alerts.SingleOrDefaultAsync(a => a.StockItemId == item.StockItemId && a.ResolvedAt == null);
-        var action = StockRules.AlertDecision(item.QuantityOnHand, item.ReorderLevel, open is not null);
-        if (action == StockRules.AlertAction.Raise)
-            db.Alerts.Add(new Alert
-            {
-                StockItemId = item.StockItemId,
-                Message = StockRules.AlertMessage(item.Name, item.Unit, item.QuantityOnHand, item.ReorderLevel),
-                QuantityAtAlert = item.QuantityOnHand,
-                ReorderLevel = item.ReorderLevel,
-                CreatedAt = when,
-            });
-        else if (action == StockRules.AlertAction.Resolve)
-            open!.ResolvedAt = when;
-        return action;
     }
 
     private IActionResult? CategoryError(string category) =>

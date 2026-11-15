@@ -51,10 +51,115 @@ export interface Prediction {
   createdAt: string;
 }
 
+// FR-05
+export interface Alert {
+  alertId: number;
+  stockItemId: number;
+  stockItemName: string;
+  unit: string;
+  message: string;
+  quantityAtAlert: number;
+  reorderLevel: number;
+  currentQuantity: number;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+// FR-06: a listing as an owner browses it
+export interface Listing {
+  supplierListingId: number;
+  supplierId: number;
+  supplierName: string;
+  deliveryArea: string | null;
+  reliabilityScore: number;
+  productName: string;
+  category: string;
+  packSize: number;
+  packPrice: number;
+  unitPrice: number;
+  leadTimeDays: number;
+  availableQuantity: number;
+  deliveryCost: number;
+  updatedAt: string;
+}
+
+// FR-07: a listing as its supplier manages it
+export interface MyListing {
+  supplierListingId: number;
+  productName: string;
+  category: string;
+  packSize: number;
+  packPrice: number;
+  unitPrice: number;
+  leadTimeDays: number;
+  availableQuantity: number;
+  deliveryCost: number;
+  isActive: boolean;
+  updatedAt: string;
+}
+
+export interface ListingInput {
+  productName: string;
+  category: string;
+  packSize: number;
+  packPrice: number;
+  leadTimeDays: number;
+  availableQuantity: number;
+  deliveryCost: number;
+  isActive: boolean;
+}
+
+export type OrderStatus = 'Placed' | 'Confirmed' | 'Dispatched' | 'Delivered' | 'Declined' | 'Cancelled';
+
+// FR-10
+export interface Order {
+  purchaseOrderId: number;
+  status: OrderStatus;
+  productName: string;
+  packSize: number;
+  packPrice: number;
+  packs: number;
+  units: number;
+  subtotal: number;
+  deliveryCost: number;
+  total: number;
+  note: string | null;
+  stockItemId: number | null;
+  supplierListingId: number;
+  supplier: { id: number; name: string; phone: string | null; deliveryArea: string | null; reliabilityScore: number };
+  owner: { id: number; name: string; contact: string; location: string; phone: string | null } | null;
+  createdAt: string;
+  confirmedAt: string | null;
+  dispatchedAt: string | null;
+  deliveredAt: string | null;
+  closedAt: string | null;
+  receivedAt: string | null;
+  nextStatuses: OrderStatus[];
+  canCancel: boolean;
+  canReceive: boolean;
+}
+
+export interface Account {
+  id: number;
+  fullName: string;
+  email: string;
+  role: 'BusinessOwner' | 'Supplier';
+  createdAt: string;
+  phone: string | null;
+  businessName: string | null;
+  location: string | null;
+  companyName: string | null;
+  deliveryArea: string | null;
+  reliabilityScore: number | null;
+}
+
+export const CATEGORIES = ['Groceries', 'Clothing', 'Electronics', 'Furniture', 'Toys'];
+
 @Injectable({ providedIn: 'root' })
 export class InventoryApi {
   private http = inject(HttpClient);
 
+  // ---- owner: stock (FR-03, FR-04, FR-05, FR-08)
   stock() { return this.http.get<StockItem[]>(`${API_URL}/api/stock`); }
   item(id: number) { return this.http.get<StockItem>(`${API_URL}/api/stock/${id}`); }
   movements(id: number, limit = 15) {
@@ -64,6 +169,40 @@ export class InventoryApi {
     return this.http.post<MovementResult>(`${API_URL}/api/stock/${id}/movements`, body);
   }
   predict(id: number) { return this.http.post<Prediction>(`${API_URL}/api/stock/${id}/prediction`, null); }
+  alerts(status: 'open' | 'resolved' | 'all' = 'open') {
+    return this.http.get<Alert[]>(`${API_URL}/api/stock/alerts?status=${status}`);
+  }
+
+  // ---- owner: suppliers and orders (FR-06, FR-10)
+  listings(q = '') {
+    return this.http.get<Listing[]>(`${API_URL}/api/listings`, { params: q ? { q } : {} });
+  }
+  orders() { return this.http.get<Order[]>(`${API_URL}/api/orders`); }
+  order(id: number) { return this.http.get<Order>(`${API_URL}/api/orders/${id}`); }
+  placeOrder(body: { supplierListingId: number; packs: number; stockItemId: number | null; note: string | null }) {
+    return this.http.post<Order>(`${API_URL}/api/orders`, body);
+  }
+  cancelOrder(id: number) { return this.http.post<Order>(`${API_URL}/api/orders/${id}/cancel`, null); }
+  receiveOrder(id: number, stockItemId: number | null) {
+    return this.http.post<{ order: Order; quantityOnHand: number; alert: 'resolved' | null }>(
+      `${API_URL}/api/orders/${id}/receive`, { stockItemId });
+  }
+
+  // ---- supplier (FR-07, FR-10)
+  myListings() { return this.http.get<MyListing[]>(`${API_URL}/api/supplier/listings`); }
+  createListing(body: ListingInput) { return this.http.post<MyListing>(`${API_URL}/api/supplier/listings`, body); }
+  updateListing(id: number, body: ListingInput) {
+    return this.http.put<MyListing>(`${API_URL}/api/supplier/listings/${id}`, body);
+  }
+  supplierOrders() { return this.http.get<Order[]>(`${API_URL}/api/supplier/orders`); }
+  supplierOrder(id: number) { return this.http.get<Order>(`${API_URL}/api/supplier/orders/${id}`); }
+  setOrderStatus(id: number, status: OrderStatus) {
+    return this.http.post<Order>(`${API_URL}/api/supplier/orders/${id}/status`, { status });
+  }
+
+  // ---- both roles
+  account() { return this.http.get<Account>(`${API_URL}/api/account`); }
+  updateAccount(body: Partial<Account>) { return this.http.put<Account>(`${API_URL}/api/account`, body); }
 }
 
 // "bag" -> "bags", "loaf" -> "loaves"; matches the API's alert messages
@@ -71,6 +210,21 @@ export function plural(unit: string, n: number): string {
   if (Math.abs(n) === 1) return unit;
   return ({ loaf: 'loaves', box: 'boxes', each: 'each' } as Record<string, string>)[unit] ?? unit + 's';
 }
+
+// R 1,234.50
+export function money(n: number): string {
+  const [whole, cents] = Math.abs(n).toFixed(2).split('.');
+  return `${n < 0 ? '−' : ''}R ${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${cents}`;
+}
+
+export function orderTone(status: OrderStatus): string {
+  return ({
+    Placed: 'pill-accent', Confirmed: 'pill-success', Dispatched: 'pill-success',
+    Delivered: 'pill-solid', Declined: 'pill-danger', Cancelled: 'pill-muted',
+  } as Record<OrderStatus, string>)[status];
+}
+
+export function isOpenOrder(o: Order) { return o.status === 'Placed' || o.status === 'Confirmed' || o.status === 'Dispatched'; }
 
 // turns an API error (ProblemDetails or validation problem) into one readable line
 export function problemText(err: any): string {

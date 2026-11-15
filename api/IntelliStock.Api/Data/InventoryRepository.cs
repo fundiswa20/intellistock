@@ -17,6 +17,7 @@ public class InventoryRepository(DbContextOptions<InventoryRepository> options) 
     public DbSet<Alert> Alerts => Set<Alert>();
     public DbSet<ReorderPrediction> ReorderPredictions => Set<ReorderPrediction>();
     public DbSet<SupplierListing> SupplierListings => Set<SupplierListing>();
+    public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -61,6 +62,15 @@ public class InventoryRepository(DbContextOptions<InventoryRepository> options) 
         {
             e.ToTable("SupplierListing");
             e.HasOne<Supplier>().WithMany().HasForeignKey(l => l.SupplierId);
+        });
+
+        b.Entity<PurchaseOrder>(e =>
+        {
+            e.ToTable("PurchaseOrder");
+            e.HasOne<BusinessOwner>().WithMany().HasForeignKey(o => o.BusinessOwnerId);
+            e.HasOne<Supplier>().WithMany().HasForeignKey(o => o.SupplierId);
+            e.HasOne<SupplierListing>().WithMany().HasForeignKey(o => o.SupplierListingId);
+            e.HasOne<StockItem>().WithMany().HasForeignKey(o => o.StockItemId);
         });
     }
 }

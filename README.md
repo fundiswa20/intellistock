@@ -113,15 +113,13 @@ immutable transaction log, FR-05 low-stock alerts, FR-08 reorder prediction. All
 implemented and tested in the API; client screens follow (see the traceability table in
 `docs/BUILD-JOURNAL.md`).
 
-Partial:
-- FR-01 registration — users are seeded; there is no registration UI.
-- FR-06, FR-07 — supplier data is seeded directly into the database; there is no
-  supplier interface.
+Built on 15 Nov; the integration tests and a hand check are still to run (journal O5):
+- FR-01 registration — owners and suppliers register from the client.
+- FR-06, FR-07 — owners browse supplier listings; suppliers manage their listings and orders.
+- FR-10 — order placement and status tracking, through to booking a delivery into stock.
 
 Not met:
 - FR-09 — consolidated reorder plan, deferred.
-- FR-10 — order placement and status tracking, deferred; ordering is not part of the
-  prototype scope.
 
 These are recorded the same way in the Assignment 3 traceability matrix. See
 `docs/BUILD-JOURNAL.md` for current status.

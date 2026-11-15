@@ -63,9 +63,27 @@ OWNERS = [
     (2, "Sipho's Tuck Shop", "Block L, Soshanguve, Pretoria", "012 555 0178"),
 ]
 SUPPLIERS = [
-    (3, "Ubuntu Wholesalers", "021 555 0190", "Khayelitsha, Mitchells Plain, Philippi"),
-    (4, "Kasi Cash & Carry", "021 555 0122", "Cape Flats"),
-    (5, "Mzansi Bulk Traders", "012 555 0145", "Tshwane North, Soshanguve"),
+    # id, company, phone, delivery area, reliability (share of orders on time)
+    (3, "Ubuntu Wholesalers", "021 555 0190", "Khayelitsha, Mitchells Plain, Philippi", 0.94),
+    (4, "Kasi Cash & Carry", "021 555 0122", "Cape Flats", 0.87),
+    (5, "Mzansi Bulk Traders", "012 555 0145", "Tshwane North, Soshanguve", 0.81),
+]
+DELIVERY_FEE = {3: 85.00, 4: 60.00, 5: 120.00}   # flat fee per order
+
+# FR-10 demo orders: owner, supplier, product, packs, status, days before the end date.
+# Illustrative only: they are not tied to the simulated wholesaler trips in the log, so a
+# Delivered order here is marked received without a matching Restock - except the last
+# Delivered one for Nomvula, left unreceived so the receive step can be shown.
+ORDERS = [
+    (1, 3, "Iwisa Super Maize Meal 5kg", 2, "Delivered", 12),
+    (1, 4, "Coca-Cola 2L", 4, "Delivered", 8),
+    (1, 4, "Joko Tea 100 bags", 1, "Declined", 5),
+    (1, 3, "Simba Chips 36g", 2, "Dispatched", 1),
+    (1, 4, "Sunfoil Cooking Oil 750ml", 1, "Confirmed", 1),
+    (1, 3, "Clover Long Life Milk 1L", 3, "DeliveredUnreceived", 1),
+    (1, 3, "Lucky Star Pilchards 400g", 2, "Placed", 0),
+    (2, 5, "Iwisa Super Maize Meal 5kg", 1, "Cancelled", 6),
+    (2, 5, "Clover Long Life Milk 1L", 3, "Placed", 0),
 ]
 
 # name, unit, base demand/day, unit cost, selling price, reorder level, pack size, supply
@@ -262,6 +280,31 @@ def simulate_shop(owner_id, specs, first_item_id, start, end, rng):
     return items, txns, alerts
 
 
+def demo_orders(listings, all_items, end):
+    rows = []
+    for owner, sid, product, packs, status, days_ago in ORDERS:
+        listing_id, l = next((i + 1, l) for i, l in enumerate(listings) if l[0] == sid and l[1] == product)
+        item = next((it["id"] for o, it in all_items if o == owner and it["name"] == product), None)
+        placed = datetime.combine(end - timedelta(days=days_ago), time(8, 30))
+        step = timedelta(hours=3) if days_ago <= 1 else timedelta(days=1)
+        confirmed = dispatched = delivered = closed = received = None
+        if status in ("Confirmed", "Dispatched", "Delivered", "DeliveredUnreceived"):
+            confirmed = placed + timedelta(hours=1)
+        if status in ("Dispatched", "Delivered", "DeliveredUnreceived"):
+            dispatched = confirmed + step
+        if status in ("Delivered", "DeliveredUnreceived"):
+            delivered = dispatched + step
+        if status == "Delivered":
+            received = delivered + timedelta(minutes=20)
+        if status in ("Declined", "Cancelled"):
+            closed = placed + timedelta(hours=2)
+        note = "Out of stock at the depot this week" if status == "Declined" else None
+        rows.append((owner, sid, listing_id, item, product, l[3], l[4], packs, l[8],
+                     "Delivered" if status == "DeliveredUnreceived" else status, note,
+                     placed, confirmed, dispatched, delivered, closed, received))
+    return rows
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--end", default="2026-09-27", help="last day of history (inclusive)")
@@ -297,7 +340,8 @@ def main():
                        datetime.combine(start - timedelta(days=7), time(10, 0)))
                       for uid, email, name, role in USERS])
     lines += inserts("BusinessOwner", ["RegisteredUserId", "BusinessName", "Location", "Phone"], OWNERS)
-    lines += inserts("Supplier", ["RegisteredUserId", "CompanyName", "Phone", "DeliveryArea"], SUPPLIERS)
+    lines += inserts("Supplier", ["RegisteredUserId", "CompanyName", "Phone", "DeliveryArea", "ReliabilityScore"],
+                     SUPPLIERS)
     lines += inserts("StockItem", ["StockItemId", "BusinessOwnerId", "Name", "Category", "Unit", "QuantityOnHand",
                                    "ReorderLevel", "UnitCost", "SellingPrice", "IsActive", "CreatedAt"],
                      [(it["id"], owner, it["name"], "Groceries", it["unit"], it["on_hand"], it["reorder"],
@@ -323,8 +367,19 @@ def main():
             price = round(it["cost"] * pack * markup * rng.uniform(0.95, 1.05), 2)
             listings.append((sid, name, "Groceries", pack, price, lead,
                              datetime.combine(end - timedelta(days=rng.randint(1, 20)), time(8, 0))))
+    # the columns added for the supplier interface (D37) draw from their own generator, so
+    # adding them did not change any stock, transaction or alert row above
+    rng2 = random.Random(20261115)
+    listings = [l[:6] + (0 if rng2.random() < 0.04 else 1, rng2.randint(4, 60), DELIVERY_FEE[l[0]], l[6])
+                for l in listings]
     lines += inserts("SupplierListing", ["SupplierId", "ProductName", "Category", "PackSize", "PackPrice",
-                                         "LeadTimeDays", "UpdatedAt"], listings)
+                                         "LeadTimeDays", "IsActive", "AvailableQuantity", "DeliveryCost",
+                                         "UpdatedAt"], listings)
+    lines += inserts("PurchaseOrder", ["BusinessOwnerId", "SupplierId", "SupplierListingId", "StockItemId",
+                                       "ProductName", "PackSize", "PackPrice", "Packs", "DeliveryCost", "Status",
+                                       "Note", "CreatedAt", "ConfirmedAt", "DispatchedAt", "DeliveredAt",
+                                       "ClosedAt", "ReceivedAt"],
+                     demo_orders(listings, all_items, end))
 
     with open(OUT, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(lines) + "\n")
@@ -333,7 +388,7 @@ def main():
     print(f"Wrote {os.path.relpath(OUT)}")
     print(f"  users {len(USERS)}, stock items {len(all_items)}, transactions {len(all_txns):,}, "
           f"alerts {len(all_alerts)} ({sum(a['resolved'] is None for a in all_alerts)} open), "
-          f"supplier listings {len(listings)}")
+          f"supplier listings {len(listings)}, orders {len(ORDERS)}")
     print(f"  at or below reorder level on {end}: {len(below)} - {', '.join(below)}")
 
 

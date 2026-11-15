@@ -26,23 +26,23 @@ and tested in the API but has no client screen yet (the minimal client is Tue 29
 
 | ID | Requirement | Status | Reason | Evidence |
 |---|---|---|---|---|
-| FR-01 | Registration | Partial | Users are seeded with hashed passwords; no registration endpoint or screen. | `db/init/02-seed.sql`, `PasswordHashTests` |
+| FR-01 | Registration | Built — integration tests not yet run | `POST /api/auth/register` for both roles, hashed with the same `PasswordHasher`; taken email 409; register screen (D37). | `SupplierAndOrderTests` (3, not yet run), `PasswordHashTests` |
 | FR-02 | Login | Pass | JWT login against seeded users; wrong password and unknown email get the same 401; missing or forged token rejected; suppliers refused stock endpoints. | `tests-integration.txt` (AuthTests, 6), `api-endpoints.txt` |
 | FR-03 | Stock item CRUD | Pass — API only | Create, read, update, soft delete; each owner sees only their own stock; another owner's item is 404. | `tests-integration.txt` (StockItemTests, 7) |
 | FR-04 | Stock movement, immutable transaction log | Pass — API only | Sale/Restock/Adjustment with running balance and row lock; overselling refused; UPDATE/DELETE rejected by database triggers. | `tests-integration.txt`, `tests-unit.txt`, `db-verification.txt` |
 | FR-05 | Low-stock alerts | Pass — API only | Raised at or below the reorder level, resolved on restock, one open alert per item enforced by the database; 8 open in the seed. | `tests-integration.txt`, `db-verification.txt` |
-| FR-06 | Supplier functionality | Partial | Supplier accounts and price lists seeded; no supplier interface. | `db-verification.txt` §8 |
-| FR-07 | Supplier functionality | Partial | Supplier data seeded; no supplier interface. | `db-verification.txt` §8 |
+| FR-06 | Supplier functionality | Built — integration tests not yet run | Owners browse every active listing, cheapest per unit first, and order from it (D37). | `SupplierAndOrderTests` (not yet run) |
+| FR-07 | Supplier functionality | Built — integration tests not yet run | Suppliers add, edit and hide listings and answer orders, in their own area of the client (D37). | `SupplierAndOrderTests` (not yet run) |
 | FR-08 | Reorder prediction | Pass — API only | Model called with history from the transaction log; days to stock-out and reorder quantity derived in the API; threshold-based advice when the model cannot be trusted. | `api-endpoints.txt`, `tests-integration.txt` (PredictionTests, 8), `model-*.txt` |
 | FR-09 | Consolidated reorder plan | Not met | Deferred. | — |
-| FR-10 | Order placement and status tracking | Not met | Deferred; ordering is not part of the prototype scope. | — |
+| FR-10 | Order placement and status tracking | Built — integration tests not yet run | Placed → Confirmed → Dispatched → Delivered, decline and cancel, packs reserved and returned, delivery booked into stock as a Restock (D37). | `OrderRulesTests` (unit, pass), `SupplierAndOrderTests` (not yet run) |
 | ETR-01 | MAPE ≤ 20% and ≥ 10% better than baseline | Pass | v1.1-relative 10.53% vs 22.18% baseline (52.5% better), chronological test period. | `model-evaluation-v1.1-relative.txt` |
 | NFR-02 | p95 response < 3 s for up to 50 concurrent users | Partial | Single-user sequential p95 34.6 ms on GET /api/stock (23 items, Docker). No concurrency test was run. | `response-times.txt` |
 | ETR-03 | Insufficient history and low confidence handled | Pass | Model service: 422 under 30 days and `lowConfidence` under 0.6. API: threshold-based advice with the reason recorded and shown (D25). | `model-service-smoke.txt`, `tests-integration.txt` |
 
 **Open issues**
 
-None open.
+**O5 — The 15 Nov changes have not been run against the database or checked by hand.** Docker Desktop was not running, so the integration tests (including the 13 new ones in `SupplierAndOrderTests`), the reseed, the container rebuild and the hand check of both workflows are still to do. The API and client build, and the unit tests pass (62, including `OrderRulesTests`). To close: `docker compose down -v`, `docker compose up -d --build`, run the integration tests, then walk the owner and supplier workflows.
 
 Resolved on Mon 28:
 
@@ -408,6 +408,46 @@ through InventoryRepository like StockController does. The diagram is updated to
 AuthController between InventoryDashboard and InventoryRepository. Recorded as an approved
 change, not a deviation.
 
+**D36 — The client is a multi-page app with a shell, role guards and a design-token palette.** _(Sun 15 Nov)_
+The single stock screen became routed pages inside a shell: a dark-green sidebar (owner:
+Dashboard, Stock, Alerts, Suppliers, Orders, Settings; supplier: Dashboard, Listings, Orders,
+Settings) and a header with the user and sign out. A landing page at `/` is for signed-out
+visitors. `roleGuard` sends a user to `/not-authorised` when a page belongs to the other role,
+and the interceptor does the same on an API 403. Colours, type (Inter), spacing (8px) and
+radii are custom properties on `:root` in `styles.css`. Amber is reserved for the forecast and
+recommendation, red for low stock. The orders list and order detail are one component each
+for both roles; what they show and allow follows the role.
+
+**D37 — Supplier interface and orders (FR-01, FR-06, FR-07, FR-10).** _(Sun 15 Nov)_
+- *Registration:* one endpoint and one form for both roles. It does say when an email is taken
+  (409), which login still never does (D22): registration can't work without saying so.
+- *Orders are single-listing:* one order is whole packs of one listing from one supplier. That
+  keeps status per order simple. A basket across suppliers is FR-09 territory and still deferred.
+- *Prices are copied onto the order* (product, pack size, pack price, delivery fee), so a later
+  listing edit does not rewrite an order already placed.
+- *Packs are reserved:* placing an order takes packs off `AvailableQuantity` under a row lock;
+  a decline or cancel gives them back.
+- *Status rules* are pure functions in `Domain/OrderRules.cs`, unit tested like `StockRules`.
+  The owner can cancel only while an order is Placed.
+- *Receiving* a delivered order books one Restock movement through the same code path as a
+  movement the owner records (`Data/StockLedger.cs`, moved out of StockController), so the
+  log, alerts and running balance stay consistent (FR-04, FR-05). It happens once per order.
+- *Ownership* follows D28: another owner's order, or another supplier's listing or order, is 404.
+- *New controllers* (OrdersController, SupplierController, AccountController) extend D24's
+  two-controller shape; EF Core is still used directly (D15).
+- *Seed:* the new columns and nine demo orders come from a separate random generator, so
+  every existing stock, transaction and alert row is unchanged. The demo orders are not tied
+  to the simulated wholesaler trips. One delivered order is left unreceived so the receive
+  step can be shown.
+
+**D38 — The supplier model and the schema are back in step.** _(Sun 15 Nov)_
+Commit `06617e3` added `Supplier.ReliabilityScore` and `SupplierListing.IsActive`,
+`AvailableQuantity` and `DeliveryCost` to the EF model but not to `01-schema.sql`. Because
+login reads `RegisteredUser` through the table-per-type mapping, which selects the Supplier
+columns, every login would fail on an unknown column. The columns were added to the schema
+(with CHECK constraints) and to the seed generator rather than removed from the model,
+because the supplier interface uses them.
+
 ---
 
 ## 2a. Known limitations (for Assignment 3 Q5.4 and Assignment 4 Q4.3)
@@ -577,6 +617,17 @@ MAPE 10.51% vs 22.18% baseline (`86de1ea`).
   real files, scope note shows FR-01 and FR-06/07 as Partial.
 
 ---
+
+**Sun 15 Nov**
+- Found that the supplier model fields from `06617e3` had no columns in the schema (D38), and
+  that there was no supplier API or client to preserve: FR-06/07 were seeded only.
+- Added the supplier interface and orders (D37): schema (`PurchaseOrder`, four columns),
+  seed, `AuthController.Register`, `AccountController`, `OrdersController`,
+  `SupplierController`, `GET /api/stock/alerts?status=`, 13 integration tests and
+  `OrderRulesTests`.
+- Rebuilt the client as a multi-page app with a design-token palette (D36).
+- API and client build; 62 unit tests pass. Integration tests, reseed, container rebuild and
+  the hand check are not done: Docker Desktop was not running (O5).
 
 ## 5. Questions to be ready for
 
