@@ -487,6 +487,27 @@ because the supplier interface uses them.
   active listing is at or below 5 packs. Refreshed on each navigation, no realtime. The
   supplier's listings put those under "Needs restocking", fewest packs first.
 
+**D40 — Order status changes are emailed.** _(Sun 15 Nov, FR-10)_
+- *Who gets what:* a placed order goes to the supplier (shop, product, quantity, total).
+  Confirmed, Dispatched and Delivered go to the owner (order number, product, supplier, new
+  status, expected delivery = confirmed date + the listing's lead time). Declined goes to the
+  owner, Cancelled to the supplier, each with the reason if one was typed in the prompt.
+- *Shape:* `IEmailService` with one SMTP implementation (`Services/EmailService.cs`). Host,
+  port, from-address and optional credentials/TLS come from the `Email` configuration section,
+  so a hosted provider can replace it by configuration or by registering another
+  implementation. `OrderNotifications` builds each message from one shared template
+  (`EmailTemplate`): IntelliStock header in the brand green, details in a table, inline
+  styles only, no images or external CSS, and a plain-text version alongside.
+- *A failed send never fails an order:* emails go out after the change is committed, and each
+  send is wrapped in try/catch and logged as a warning. The API answers as normal. Integration
+  tests replace the sender with a recorder and include a test where every send throws.
+- *MailHog is for development only.* Compose runs `mailhog/mailhog`; the API sends to
+  `mailhog:1025` without authentication and the messages are read at http://localhost:8025.
+  Nothing is delivered to a real inbox. Production would point the `Email` settings at a real
+  provider (with TLS and credentials) instead.
+- *Sent inline, not queued:* a send waits for SMTP (5-second timeout) before the API answers.
+  Fine at this scale; a queue with retries would be the next step for a real provider.
+
 ---
 
 ## 2a. Known limitations (for Assignment 3 Q5.4 and Assignment 4 Q4.3)

@@ -3,6 +3,8 @@ using System.Security.Claims;
 using IntelliStock.Api.Data;
 using IntelliStock.Api.Domain;
 using IntelliStock.Api.Models;
+using IntelliStock.Api.Services;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,11 +19,13 @@ public record PlaceOrderRequest(
 
 public record ReceiveOrderRequest(int? StockItemId);
 
+public record CancelOrderRequest([StringLength(255)] string? Reason);
+
 // FR-06 (browse supplier listings) and FR-10 (place and track orders), for the owner (D37).
 // Like stock, another owner's order answers 404 (D28).
 [ApiController]
 [Authorize(Roles = "BusinessOwner")]
-public class OrdersController(InventoryRepository db) : ControllerBase
+public class OrdersController(InventoryRepository db, OrderNotifications notify) : ControllerBase
 {
     private int OwnerId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -201,11 +205,14 @@ public class OrdersController(InventoryRepository db) : ControllerBase
         db.PurchaseOrders.Add(order);
         await db.SaveChangesAsync();
         await tx.CommitAsync();
+        var owner = await db.BusinessOwners.SingleAsync(w => w.RegisteredUserId == OwnerId);
+        await notify.Placed(order, owner, supplier);
         return CreatedAtAction(nameof(Get), new { id = order.PurchaseOrderId }, OrderViews.View(order, supplier, null));
     }
 
     [HttpPost("api/orders/{id:int}/cancel")]
-    public async Task<IActionResult> Cancel(int id)
+    public async Task<IActionResult> Cancel(int id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CancelOrderRequest? req)
     {
         await using var tx = await db.Database.BeginTransactionAsync();
         var order = await OrderViews.Lock(db, id);
@@ -223,6 +230,8 @@ public class OrdersController(InventoryRepository db) : ControllerBase
         await db.SaveChangesAsync();
         await tx.CommitAsync();
         var supplier = await db.Suppliers.SingleAsync(s => s.RegisteredUserId == order.SupplierId);
+        var owner = await db.BusinessOwners.SingleAsync(w => w.RegisteredUserId == OwnerId);
+        await notify.StatusChanged(order, owner, supplier, string.IsNullOrWhiteSpace(req?.Reason) ? null : req.Reason.Trim());
         return Ok(OrderViews.View(order, supplier, null));
     }
 

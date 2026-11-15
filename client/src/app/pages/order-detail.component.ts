@@ -226,13 +226,23 @@ export class OrderDetailComponent implements OnInit {
   }
 
   cancel(o: Order) {
-    if (!confirm(`Cancel order #${o.purchaseOrderId}? The supplier will see it as cancelled.`)) return;
-    this.run(this.api.cancelOrder(o.purchaseOrderId), () => 'Order cancelled.');
+    // the answer is emailed to the supplier with the cancellation (D40); Cancel keeps the order
+    const reason = prompt(`Cancel order #${o.purchaseOrderId}? The supplier will be told by email.
+
+Reason (optional):`, '');
+    if (reason === null) return;
+    this.run(this.api.cancelOrder(o.purchaseOrderId, reason.trim() || null), () => 'Order cancelled.');
   }
 
   setStatus(o: Order, s: OrderStatus) {
-    if (s === 'Declined' && !confirm(`Decline order #${o.purchaseOrderId}? The shop will see it as declined.`)) return;
-    this.run(this.api.setOrderStatus(o.purchaseOrderId, s), n => `Order marked ${n.status.toLowerCase()}.`);
+    let reason: string | null = null;
+    if (s === 'Declined') {
+      reason = prompt(`Decline order #${o.purchaseOrderId}? The shop will be told by email.
+
+Reason (optional):`, '');
+      if (reason === null) return;
+    }
+    this.run(this.api.setOrderStatus(o.purchaseOrderId, s, reason?.trim() || null), n => `Order marked ${n.status.toLowerCase()}.`);
   }
 
   receive(o: Order) {

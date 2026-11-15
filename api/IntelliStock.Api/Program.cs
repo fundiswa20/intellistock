@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using IntelliStock.Api.Controllers;
 using IntelliStock.Api.Data;
+using IntelliStock.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -19,6 +20,12 @@ builder.Services.AddHttpClient(StockController.ModelClient, c =>
     c.BaseAddress = new Uri(config["ModelService:BaseUrl"] ?? "http://localhost:8000");
     c.Timeout = TimeSpan.FromSeconds(config.GetValue("ModelService:TimeoutSeconds", 5));
 });
+
+// D40: order status emails. SMTP settings come from configuration (MailHog in development),
+// so a real provider can replace it without code changes.
+builder.Services.AddSingleton(config.GetSection(EmailOptions.Section).Get<EmailOptions>() ?? new EmailOptions());
+builder.Services.AddSingleton<IEmailService, SmtpEmailService>();
+builder.Services.AddScoped<OrderNotifications>();
 
 // FR-02: JWT bearer tokens issued by AuthController
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

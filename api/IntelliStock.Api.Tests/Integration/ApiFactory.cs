@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using IntelliStock.Api.Controllers;
+using IntelliStock.Api.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,6 +27,7 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public static string ConnectionString => $"{MySqlServer};Database={Database}";
 
     public StubModelService Model { get; } = new();
+    public RecordingEmailService Email { get; } = new();
 
     public async Task InitializeAsync()
     {
@@ -44,7 +46,10 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseEnvironment("Development");
         builder.UseSetting("ConnectionStrings:Inventory", ConnectionString);
         builder.ConfigureServices(s =>
-            s.AddHttpClient(StockController.ModelClient).ConfigurePrimaryHttpMessageHandler(() => Model));
+        {
+            s.AddHttpClient(StockController.ModelClient).ConfigurePrimaryHttpMessageHandler(() => Model);
+            s.AddSingleton<IEmailService>(Email);   // no SMTP server in tests (D40)
+        });
     }
 
     public async Task<HttpClient> LoginAs(string email)
@@ -142,4 +147,20 @@ public class StubModelService : HttpMessageHandler
 public class ApiCollection : ICollectionFixture<ApiFactory>
 {
     public const string Name = "api";
+}
+
+// Stands in for the SMTP sender (D40). Keeps every message; set Fail to make every send throw.
+public class RecordingEmailService : IEmailService
+{
+    private readonly List<EmailMessage> sent = [];
+    public bool Fail { get; set; }
+
+    public IReadOnlyList<EmailMessage> Sent { get { lock (sent) return sent.ToList(); } }
+
+    public Task SendAsync(EmailMessage message, CancellationToken ct = default)
+    {
+        if (Fail) throw new InvalidOperationException("SMTP server unreachable (test)");
+        lock (sent) sent.Add(message);
+        return Task.CompletedTask;
+    }
 }

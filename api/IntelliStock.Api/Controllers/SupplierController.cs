@@ -3,6 +3,7 @@ using System.Security.Claims;
 using IntelliStock.Api.Data;
 using IntelliStock.Api.Domain;
 using IntelliStock.Api.Models;
+using IntelliStock.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -19,14 +20,14 @@ public record ListingRequest(
     [Range(0, 100_000)] decimal DeliveryCost,
     bool IsActive = true);
 
-public record OrderStatusRequest([Required] string Status);
+public record OrderStatusRequest([Required] string Status, [StringLength(255)] string? Reason = null);
 
 // FR-06 / FR-07: the supplier's own price list and the orders placed with them (D37).
 // Every query is scoped to the signed-in supplier; anyone else's listing or order is 404.
 [ApiController]
 [Route("api/supplier")]
 [Authorize(Roles = "Supplier")]
-public class SupplierController(InventoryRepository db) : ControllerBase
+public class SupplierController(InventoryRepository db, OrderNotifications notify) : ControllerBase
 {
     private int SupplierId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -105,7 +106,9 @@ public class SupplierController(InventoryRepository db) : ControllerBase
         await tx.CommitAsync();
 
         var owner = await db.BusinessOwners.SingleAsync(w => w.RegisteredUserId == order.BusinessOwnerId);
-        return Ok(OrderViews.View(order, await Me(), owner));
+        var me = await Me();
+        await notify.StatusChanged(order, owner, me, string.IsNullOrWhiteSpace(req.Reason) ? null : req.Reason.Trim());
+        return Ok(OrderViews.View(order, me, owner));
     }
 
     // ------------------------------------------------------------------ helpers

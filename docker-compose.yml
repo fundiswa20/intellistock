@@ -27,6 +27,14 @@ services:
       MODEL_DIR: /app/models
       DEFAULT_MODEL_ID: v1.1-relative   # v1.0-base stays available via modelId (see BUILD-JOURNAL D16)
 
+  # development mail catcher: the API sends order emails here; read them at http://localhost:8025 (D40)
+  mailhog:
+    image: mailhog/mailhog
+    container_name: intellistock-mailhog
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # web UI
+
   api:
     build: ./api
     container_name: intellistock-api
@@ -38,10 +46,14 @@ services:
       # development signing key; set JWT_KEY (32+ characters) for anything shared
       Jwt__Key: ${JWT_KEY:-development-only-signing-key-not-for-production-use}
       Cors__Origins__0: http://localhost:4201
+      Email__Host: mailhog
+      Email__Port: "1025"
     depends_on:
       db:
         condition: service_healthy
       model-service:
+        condition: service_started
+      mailhog:
         condition: service_started
 
   client:

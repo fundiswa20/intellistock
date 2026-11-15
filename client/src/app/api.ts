@@ -223,7 +223,9 @@ export class InventoryApi {
   placeOrder(body: { supplierListingId: number; packs: number; stockItemId: number | null; note: string | null }) {
     return this.http.post<Order>(`${API_URL}/api/orders`, body);
   }
-  cancelOrder(id: number) { return this.http.post<Order>(`${API_URL}/api/orders/${id}/cancel`, null); }
+  cancelOrder(id: number, reason: string | null = null) {
+    return this.http.post<Order>(`${API_URL}/api/orders/${id}/cancel`, { reason });
+  }
   receiveOrder(id: number, stockItemId: number | null) {
     return this.http.post<{ order: Order; quantityOnHand: number; alert: 'resolved' | null }>(
       `${API_URL}/api/orders/${id}/receive`, { stockItemId });
@@ -237,8 +239,8 @@ export class InventoryApi {
   }
   supplierOrders() { return this.http.get<Order[]>(`${API_URL}/api/supplier/orders`); }
   supplierOrder(id: number) { return this.http.get<Order>(`${API_URL}/api/supplier/orders/${id}`); }
-  setOrderStatus(id: number, status: OrderStatus) {
-    return this.http.post<Order>(`${API_URL}/api/supplier/orders/${id}/status`, { status });
+  setOrderStatus(id: number, status: OrderStatus, reason: string | null = null) {
+    return this.http.post<Order>(`${API_URL}/api/supplier/orders/${id}/status`, { status, reason });
   }
 
   // ---- both roles
